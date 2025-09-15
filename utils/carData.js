@@ -84,80 +84,33 @@ function formatRupees(amount) {
 
 async function getAvailableTypes(pool, budget) {
   try {
-    // Query the database to get actual car types from your Excel data
-    // We'll infer the type from the model/variant names
-    let query = 'SELECT DISTINCT model, variant FROM cars WHERE 1=1';
-    let params = [];
+    let query = 'SELECT DISTINCT type FROM cars WHERE type IS NOT NULL';
+    const params = [];
     let paramCount = 0;
-    
-    // Filter by budget range
+
     if (budget && budget !== 'Any') {
       let minPrice = 0;
       let maxPrice = 999999999;
-      
       if (budget.includes('Under ₹5')) {
         maxPrice = 500000;
       } else if (budget.includes('₹5-10')) {
-        minPrice = 500000;
-        maxPrice = 1000000;
+        minPrice = 500000; maxPrice = 1000000;
       } else if (budget.includes('₹10-15')) {
-        minPrice = 1000000;
-        maxPrice = 1500000;
+        minPrice = 1000000; maxPrice = 1500000;
       } else if (budget.includes('₹15-20')) {
-        minPrice = 1500000;
-        maxPrice = 2000000;
+        minPrice = 1500000; maxPrice = 2000000;
       } else if (budget.includes('Above ₹20')) {
         minPrice = 2000000;
       }
-      
-      paramCount++;
-      query += ` AND CAST(price AS NUMERIC) >= $${paramCount}`;
-      params.push(minPrice);
-      
-      if (maxPrice < 999999999) {
-        paramCount++;
-        query += ` AND CAST(price AS NUMERIC) <= $${paramCount}`;
-        params.push(maxPrice);
-      }
+      paramCount++; query += ` AND CAST(price AS NUMERIC) >= $${paramCount}`; params.push(minPrice);
+      if (maxPrice < 999999999) { paramCount++; query += ` AND CAST(price AS NUMERIC) <= $${paramCount}`; params.push(maxPrice); }
     }
-    
-    query += ' ORDER BY model, variant';
-    
+
+    query += ' ORDER BY type';
     console.log('🔍 Types query:', query);
-    console.log('📊 Types params:', params);
-    
-    // Use retry mechanism for the query
-    const res = await retryQuery(pool, async () => {
-      return await pool.query(query, params);
-    });
-    
-    // Infer car types from model names
-    const typeMap = new Map();
-    res.rows.forEach(row => {
-      const model = row.model?.toLowerCase() || '';
-      const variant = row.variant?.toLowerCase() || '';
-      
-      // Map common model names to car types
-      if (model.includes('swift') || model.includes('i10') || model.includes('alto') || model.includes('celerio')) {
-        typeMap.set('Hatchback', true);
-      } else if (model.includes('city') || model.includes('verna') || model.includes('amaze') || model.includes('dzire')) {
-        typeMap.set('Sedan', true);
-      } else if (model.includes('creta') || model.includes('venue') || model.includes('brezza') || model.includes('xuv')) {
-        typeMap.set('SUV', true);
-      } else if (model.includes('thar') || model.includes('scorpio')) {
-        typeMap.set('SUV', true);
-      } else if (model.includes('innova') || model.includes('ertiga') || model.includes('carens')) {
-        typeMap.set('MUV', true);
-      }
-    });
-    
-    // Convert to array and add default types if none found
-    const types = Array.from(typeMap.keys());
-    if (types.length === 0) {
-      types.push('Hatchback', 'Sedan', 'SUV', 'MUV');
-    }
-    
-    console.log(`📈 Found ${types.length} car types from database:`, types);
+    const res = await retryQuery(pool, async () => await pool.query(query, params));
+    const types = res.rows.map(r => r.type);
+    if (types.length === 0) return ['Hatchback', 'Sedan', 'SUV', 'MUV'];
     return types;
   } catch (error) {
     console.error('Error fetching car types:', error);
@@ -173,23 +126,9 @@ async function getAvailableBrands(pool, budget, type) {
     let params = [];
     let paramCount = 0;
     
-    // Filter by type (infer from model/variant names)
+    // Filter by type using actual type column
     if (type && type !== 'Any' && type !== 'all') {
-      let typeConditions = [];
-      
-      if (type === 'Hatchback') {
-        typeConditions = ["model ILIKE '%swift%'", "model ILIKE '%i10%'", "model ILIKE '%alto%'", "model ILIKE '%celerio%'"];
-      } else if (type === 'Sedan') {
-        typeConditions = ["model ILIKE '%city%'", "model ILIKE '%verna%'", "model ILIKE '%amaze%'", "model ILIKE '%dzire%'"];
-      } else if (type === 'SUV') {
-        typeConditions = ["model ILIKE '%creta%'", "model ILIKE '%venue%'", "model ILIKE '%brezza%'", "model ILIKE '%xuv%'", "model ILIKE '%thar%'", "model ILIKE '%scorpio%'"];
-      } else if (type === 'MUV') {
-        typeConditions = ["model ILIKE '%innova%'", "model ILIKE '%ertiga%'", "model ILIKE '%carens%'"];
-      }
-      
-      if (typeConditions.length > 0) {
-        query += ` AND (${typeConditions.join(' OR ')})`;
-      }
+      paramCount++; query += ` AND type = $${paramCount}`; params.push(type);
     }
     
     // Filter by budget range
@@ -229,9 +168,7 @@ async function getAvailableBrands(pool, budget, type) {
     console.log('📊 Brands params:', params);
     
     // Use retry mechanism for the main query
-    const res = await retryQuery(pool, async () => {
-      return await pool.query(query, params);
-    });
+    const res = await retryQuery(pool, async () => await pool.query(query, params));
     
     const brands = res.rows.map(row => row.brand);
     console.log(`📈 Found ${brands.length} brands with available cars:`, brands);
@@ -246,7 +183,7 @@ async function getAvailableBrands(pool, budget, type) {
 
 async function getCarsByFilter(pool, budget, type, brand) {
   try {
-    let query = 'SELECT * FROM cars WHERE 1=1'; // Start with a valid WHERE clause
+    let query = 'SELECT * FROM cars WHERE 1=1';
     let params = [];
     let paramCount = 0;
 
@@ -257,23 +194,9 @@ async function getCarsByFilter(pool, budget, type, brand) {
       params.push(brand);
     }
 
-    // Filter by type (infer from model/variant names)
+    // Filter by type using type column
     if (type && type !== 'Any' && type !== 'all') {
-      let typeConditions = [];
-      
-      if (type === 'Hatchback') {
-        typeConditions = ["model ILIKE '%swift%'", "model ILIKE '%i10%'", "model ILIKE '%alto%'", "model ILIKE '%celerio%'"];
-      } else if (type === 'Sedan') {
-        typeConditions = ["model ILIKE '%city%'", "model ILIKE '%verna%'", "model ILIKE '%amaze%'", "model ILIKE '%dzire%'"];
-      } else if (type === 'SUV') {
-        typeConditions = ["model ILIKE '%creta%'", "model ILIKE '%venue%'", "model ILIKE '%brezza%'", "model ILIKE '%xuv%'", "model ILIKE '%thar%'", "model ILIKE '%scorpio%'"];
-      } else if (type === 'MUV') {
-        typeConditions = ["model ILIKE '%innova%'", "model ILIKE '%ertiga%'", "model ILIKE '%carens%'"];
-      }
-      
-      if (typeConditions.length > 0) {
-        query += ` AND (${typeConditions.join(' OR ')})`;
-      }
+      paramCount++; query += ` AND type = $${paramCount}`; params.push(type);
     }
 
     // Filter by budget range

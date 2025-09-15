@@ -73,11 +73,60 @@ async function handleCarValuationStep(session, userMessage) {
   switch (state) {
     case 'start':
     case 'valuation_start':
-      session.step = 'brand';
-      return {
-        message: "Great! I'll help you get a valuation for your car. Let's start with some basic details.\n\nFirst, which brand is your car?",
-        options: [...await getAllBrands(pool), "Other brands"]
-      };
+      // Skip steps if prefilled
+      if (!session.brand) {
+        session.step = 'brand';
+        return {
+          message: "Great! I'll help you get a valuation for your car. Let's start with some basic details.\n\nFirst, which brand is your car?",
+          options: [...await getAllBrands(pool), "Other brands"]
+        };
+      }
+      if (!session.model) {
+        session.step = 'model';
+        const models = await getModelsByBrand(pool, session.brand);
+        return {
+          message: `Perfect! Which ${session.brand} model do you have?`,
+          options: [...models, `Other ${session.brand} models`]
+        };
+      }
+      if (!session.year) {
+        session.step = 'year';
+        return {
+          message: `Excellent! What year is your ${session.model}?`,
+          options: YEAR_OPTIONS
+        };
+      }
+      if (!session.fuel) {
+        session.step = 'fuel';
+        return {
+          message: `Great! What's the fuel type of your ${session.year} ${session.model}?`,
+          options: FUEL_OPTIONS
+        };
+      }
+      if (!session.kms) {
+        session.step = 'kms';
+        return {
+          message: "Perfect! How many kilometers has your car been driven?",
+          options: KM_OPTIONS
+        };
+      }
+      if (!session.owner) {
+        session.step = 'owner';
+        return {
+          message: "Almost done! How many owners has this car had?",
+          options: OWNER_OPTIONS
+        };
+      }
+      if (!session.condition) {
+        session.step = 'condition';
+        return {
+          message: "Last question! How would you rate your car's overall condition?",
+          options: CONDITION_OPTIONS
+        };
+      }
+      // If details already provided, jump to name collection
+      session.step = 'name';
+      return { message: "Great! We'd love to purchase your car. Let me collect your details:\n\n1. Your Name:" };
 
     case 'brand':
       if (userMessage === 'Other brands') {

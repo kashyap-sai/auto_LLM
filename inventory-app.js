@@ -997,6 +997,114 @@ app.get('/api/cars', authenticateToken, async (req, res) => {
     }
 });
 
+// API endpoint to update car details
+app.put('/api/cars/:id', authenticateToken, async (req, res) => {
+    try {
+        const carId = req.params.id;
+        const {
+            registration_number,
+            brand,
+            model,
+            variant,
+            type,
+            year,
+            fuel_type,
+            transmission,
+            mileage,
+            price,
+            color,
+            engine_cc,
+            power_bhp,
+            seats,
+            description,
+            status
+        } = req.body;
+        
+        console.log(`📝 Updating car ${carId} for dealer ${req.user.id}...`);
+        
+        // Verify car belongs to dealer
+        const carResult = await pool.query(
+            'SELECT id FROM cars WHERE id = $1 AND dealer_id = $2',
+            [carId, req.user.id]
+        );
+        
+        if (carResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Car not found or access denied' });
+        }
+        
+        // Check if registration number is being changed and if it conflicts
+        if (registration_number) {
+            const existingCar = await pool.query(
+                'SELECT id FROM cars WHERE registration_number = $1 AND id != $2',
+                [registration_number, carId]
+            );
+            
+            if (existingCar.rows.length > 0) {
+                return res.status(400).json({ error: 'Registration number already exists' });
+            }
+        }
+        
+        // Update car details
+        const updateResult = await pool.query(
+            `UPDATE cars SET 
+                registration_number = COALESCE($1, registration_number),
+                brand = COALESCE($2, brand),
+                model = COALESCE($3, model),
+                variant = COALESCE($4, variant),
+                type = COALESCE($5, type),
+                year = COALESCE($6, year),
+                fuel_type = COALESCE($7, fuel_type),
+                transmission = COALESCE($8, transmission),
+                mileage = COALESCE($9, mileage),
+                price = COALESCE($10, price),
+                color = COALESCE($11, color),
+                engine_cc = COALESCE($12, engine_cc),
+                power_bhp = COALESCE($13, power_bhp),
+                seats = COALESCE($14, seats),
+                description = COALESCE($15, description),
+                status = COALESCE($16, status),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = $17 AND dealer_id = $18
+            RETURNING *`,
+            [
+                registration_number,
+                brand,
+                model,
+                variant,
+                type,
+                year ? parseInt(year) : null,
+                fuel_type,
+                transmission,
+                mileage ? parseInt(mileage) : null,
+                price ? parseFloat(price) : null,
+                color,
+                engine_cc ? parseInt(engine_cc) : null,
+                power_bhp ? parseInt(power_bhp) : null,
+                seats ? parseInt(seats) : null,
+                description,
+                status,
+                carId,
+                req.user.id
+            ]
+        );
+        
+        if (updateResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Car not found or update failed' });
+        }
+        
+        console.log(`✅ Car ${carId} updated successfully`);
+        
+        res.json({
+            message: 'Car updated successfully',
+            car: updateResult.rows[0]
+        });
+        
+    } catch (error) {
+        console.error('❌ Update car error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 app.get('/api/bot-confirmations', authenticateToken, async (req, res) => {
     try {
         const result = await pool.query(

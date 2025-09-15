@@ -29,6 +29,10 @@ async function handleAboutUsStep(session, userMessage) {
       };
 
     case "about_selection":
+      // If router passed a direct section (from LLM or regex), dispatch immediately
+      if (["Company Story","Why Choose Us","Our Locations","Our Services","Awards & Achievements"].includes(userMessage)) {
+        userMessage = `Show ${userMessage}`;
+      }
       if (userMessage.includes("Company Story")) {
         return {
           message: `Here's our journey and what makes Sherpa Hyundai special: 🚗✨

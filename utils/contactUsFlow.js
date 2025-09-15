@@ -9,6 +9,30 @@ async function handleContactUsStep(session, userMessage) {
     case 'contact_start':
     case 'contact_menu':
       session.step = 'contact_menu'; // Reset step in case it’s called from main menu
+      // If slots prefilled (from router), fast-forward
+      if (session.callback_time || session.callback_name || session.callback_phone) {
+        if (!session.callback_time) {
+          session.step = 'callback_time';
+          return {
+            message: "Perfect! Our team will call you back. What's the best time to reach you?",
+            options: [
+              "🌅 Morning(9-12PM)",
+              "🌞 Afternoon(12-4PM)",
+              "🌆 Evening(4PM-8PM)"
+            ]
+          };
+        }
+        if (!session.callback_name) {
+          session.step = 'callback_name';
+          return { message: "Great! Please provide your name:" };
+        }
+        if (!session.callback_phone) {
+          session.step = 'contact_callback_phone';
+          return { message: "Please provide your phone number:" };
+        }
+        session.step = 'callback_reason';
+        return { message: "What do you need help with?" };
+      }
              if (userMessage.includes("Call")) {
          session.step = 'done';
          return {

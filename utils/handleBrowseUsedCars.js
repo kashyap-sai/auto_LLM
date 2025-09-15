@@ -1,4 +1,5 @@
 const { formatRupees, getAvailableTypes, getAvailableBrands, getCarsByFilter , getCarImagesByRegistration} = require('./carData');
+const { extractBrowseSlots } = require('./intentExtractor');
 const { getNextAvailableDays, getTimeSlots, getActualDateFromSelection, getActualDateFromDaySelection } = require('./timeUtils');
 const { validateBudget, validateCarType, validateBrand, createValidationErrorMessage } = require('./inputValidation');
 const fs = require('fs');
@@ -70,17 +71,104 @@ async function handleBrowseUsedCars(session, userMessage) {
       console.log("🔄 Step matched: browse_start");
       console.log("📝 User message in browse_start:", userMessage);
       
-      // Always start with budget selection for new browse conversations
-      session.step = 'browse_budget';
-      return {
-        message: "Great choice! Let's find your perfect car. First, what's your budget range?",
-        options: BUDGET_OPTIONS
-      };
+      // If brand/type/budget pre-filled, skip steps accordingly
+      if (!session.budget) {
+        session.step = 'browse_budget';
+        return {
+          message: "Great! We'll help you find cars. First, what's your budget range?",
+          options: BUDGET_OPTIONS
+        };
+      }
+      if (!session.type) {
+        session.step = 'browse_type';
+        const types = await getAvailableTypes(pool, session.budget);
+        return {
+          message: `Noted your budget (${session.budget}). What type of car do you prefer?`,
+          options: ['all Type', ...types]
+        };
+      }
+      if (!session.brand) {
+        session.step = 'browse_brand';
+        const brands = await getAvailableBrands(pool, session.budget, session.type);
+        return {
+          message: `Got it. Any preferred brand?`,
+          options: ['all Brand', ...brands]
+        };
+      }
+      // If all provided, jump to results
+      session.step = 'show_cars';
+      const carsPrefilled = await getCarsByFilter(pool, session.budget, session.type, session.brand);
+      session.filteredCars = carsPrefilled;
+      session.carIndex = 0;
+      if (carsPrefilled.length === 0) {
+        return { message: `We don't have cars matching your criteria right now.`, options: ["Change criteria"] };
+      }
+      return await getCarDisplayChunk(session, pool);
 
     case 'browse_budget':
       console.log("🔄 Step matched: browse_budget");
       console.log("💰 Validating budget:", userMessage);
       
+      // New: allow users to type brand/type sentences here; capture and skip
+      try {
+        const slots = await extractBrowseSlots(userMessage);
+        if (slots) {
+          // If a brand mentioned, store it
+          if (slots.brand && !session.brand) {
+            const capBrand = slots.brand.charAt(0).toUpperCase() + slots.brand.slice(1).toLowerCase();
+            session.brand = capBrand;
+            console.log("📝 Captured brand during budget step:", session.brand);
+          }
+          // If a type mentioned, store it (map to title case)
+          if (slots.type && !session.type) {
+            const mapping = { suv: 'SUV', sedan: 'Sedan', hatchback: 'Hatchback', coupe: 'Coupe', convertible: 'Convertible', wagon: 'Wagon', pickup: 'Pickup', muv: 'MUV' };
+            const t = slots.type.toLowerCase();
+            session.type = mapping[t] || (t.charAt(0).toUpperCase() + t.slice(1));
+            console.log("📝 Captured type during budget step:", session.type);
+          }
+          // If a budget range was expressed in free text, convert to bucket and proceed
+          if (typeof slots.budgetMin === 'number' || typeof slots.budgetMax === 'number') {
+            const min = slots.budgetMin ?? 0;
+            const max = slots.budgetMax ?? Infinity;
+            if (max <= 500000) session.budget = 'Under ₹5 Lakhs';
+            else if (min >= 500000 && max <= 1000000) session.budget = '₹5-10 Lakhs';
+            else if (min >= 1000000 && max <= 1500000) session.budget = '₹10-15 Lakhs';
+            else if (min >= 1500000 && max <= 2000000) session.budget = '₹15-20 Lakhs';
+            else if (min >= 2000000 || max === Infinity) session.budget = 'Above ₹20 Lakhs';
+            if (session.budget) {
+              console.log("📝 Budget inferred during budget step:", session.budget);
+              // proceed like a valid budget selection
+              const budgetValidation = { isValid: true, matchedOption: session.budget };
+              console.log("✅ Valid budget selected:", budgetValidation.matchedOption);
+              session.budget = budgetValidation.matchedOption;
+              session.step = 'browse_type';
+              console.log("📝 Updated session step to:", session.step);
+              console.log("💰 Updated session budget to:", session.budget);
+              const types = await getAvailableTypes(pool, session.budget);
+              return {
+                message: `Perfect! ${budgetValidation.matchedOption} gives you excellent options. What type of car do you prefer?`,
+                options: ['all Type', ...types]
+              };
+            }
+          }
+          // If only brand/type captured and no budget yet, ask budget without error
+          if ((slots.brand || slots.type) && !session.budget) {
+            return {
+              message: `Noted${session.brand ? ' brand ' + session.brand : ''}${session.type ? ' and type ' + session.type : ''}. What's your budget range?`,
+              options: [
+                "Under ₹5 Lakhs",
+                "₹5-10 Lakhs",
+                "₹10-15 Lakhs",
+                "₹15-20 Lakhs",
+                "Above ₹20 Lakhs"
+              ]
+            };
+          }
+        }
+      } catch (e) {
+        console.log('ℹ️ Slot extraction skipped/failed in budget step:', e?.message);
+      }
+
       const budgetValidation = validateBudget(userMessage);
       if (!budgetValidation.isValid) {
         const BUDGET_OPTIONS = [
@@ -113,6 +201,35 @@ async function handleBrowseUsedCars(session, userMessage) {
       console.log("🔄 Step matched: browse_type");
       console.log("🚗 Validating car type:", userMessage);
       
+      // Allow users to mention brand/type here in free text
+      try {
+        const slots = await extractBrowseSlots(userMessage);
+        if (slots) {
+          // Capture brand if provided at the wrong step
+          if (slots.brand && !session.brand) {
+            const capBrand = slots.brand.charAt(0).toUpperCase() + slots.brand.slice(1).toLowerCase();
+            session.brand = capBrand;
+            console.log("📝 Captured brand during type step:", session.brand);
+          }
+          // If a valid type was expressed, prefer it
+          if (slots.type) {
+            const mapping = { suv: 'SUV', sedan: 'Sedan', hatchback: 'Hatchback', coupe: 'Coupe', convertible: 'Convertible', wagon: 'Wagon', pickup: 'Pickup', muv: 'MUV' };
+            const t = slots.type.toLowerCase();
+            const normalizedType = mapping[t] || (t.charAt(0).toUpperCase() + t.slice(1));
+            userMessage = normalizedType; // fall through to normal validation
+          } else if (slots.brand && !slots.type) {
+            // Only brand provided, ask for type again (no error)
+            const types = await getAvailableTypes(pool, session.budget);
+            return {
+              message: `Noted your brand ${session.brand}. What type of car do you prefer?`,
+              options: ['all Type', ...types]
+            };
+          }
+        }
+      } catch (e) {
+        console.log('ℹ️ Slot extraction skipped/failed in type step:', e?.message);
+      }
+
       const typeValidation = validateCarType(userMessage);
       if (!typeValidation.isValid) {
         const types = await getAvailableTypes(pool, session.budget);
