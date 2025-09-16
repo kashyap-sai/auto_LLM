@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 const { formatRupees, getAvailableTypes, getAvailableBrands, getCarsByFilter , getCarImagesByRegistration} = require('./carData');
 const { extractBrowseSlots } = require('./intentExtractor');
+=======
+const { formatRupees, getAvailableTypes, getAvailableTypesByBrand, getAvailableBrands, getCarsByFilter , getCarImagesByRegistration} = require('./carData');
+>>>>>>> 3c80ab4 (Updated the Gemini LLM)
 const { getNextAvailableDays, getTimeSlots, getActualDateFromSelection, getActualDateFromDaySelection } = require('./timeUtils');
 const { validateBudget, validateCarType, validateBrand, createValidationErrorMessage } = require('./inputValidation');
 const fs = require('fs');
@@ -7,6 +11,13 @@ const path = require('path');
 
 // Import database connection
 const pool = require('../db');
+
+// Case-insensitive matcher helper
+function findCaseInsensitiveMatch(list, value) {
+  if (!value || !Array.isArray(list)) return null;
+  const target = String(value).toLowerCase();
+  return list.find(item => String(item).toLowerCase() === target) || null;
+}
 
 // Helper function to construct image URL using the new naming convention
 // Only returns URL if image exists in database
@@ -51,6 +62,28 @@ function isPubliclyAccessible(baseUrl) {
 
 async function handleBrowseUsedCars(session, userMessage) {
   console.log("📩 Entered handleBrowseUsedCars");
+  const lowerMsg = String(userMessage || '').toLowerCase();
+  // Global interceptor: allow changing criteria from any step
+  if (lowerMsg.includes('change criteria') || lowerMsg.includes('change my criteria') || lowerMsg.includes('modify criteria') || lowerMsg.includes('start over')) {
+    const BUDGET_OPTIONS = [
+      "Under ₹5 Lakhs",
+      "₹5-10 Lakhs",
+      "₹10-15 Lakhs",
+      "₹15-20 Lakhs",
+      "Above ₹20 Lakhs"
+    ];
+    session.step = 'browse_budget';
+    session.carIndex = 0;
+    session.filteredCars = [];
+    session.selectedCar = null;
+    session.budget = null;
+    session.type = null;
+    session.brand = null;
+    return {
+      message: "No problem! Let's find you a different car. What's your budget range?",
+      options: BUDGET_OPTIONS
+    };
+  }
   
   const step = session.step || 'browse_start';
   console.log("🧠 Current step:", step);
@@ -71,6 +104,7 @@ async function handleBrowseUsedCars(session, userMessage) {
       console.log("🔄 Step matched: browse_start");
       console.log("📝 User message in browse_start:", userMessage);
       
+<<<<<<< HEAD
       // If brand/type/budget pre-filled, skip steps accordingly
       if (!session.budget) {
         session.step = 'browse_budget';
@@ -104,6 +138,72 @@ async function handleBrowseUsedCars(session, userMessage) {
         return { message: `We don't have cars matching your criteria right now.`, options: ["Change criteria"] };
       }
       return await getCarDisplayChunk(session, pool);
+=======
+      // If budget is already known, skip budget question
+      if (session.budget) {
+        let normalizedBudget = null;
+        if (typeof session.budget === 'string' && BUDGET_OPTIONS.includes(session.budget)) {
+          normalizedBudget = session.budget;
+        } else if (typeof session.budget === 'object' && session.budget) {
+          const min = Number(session.budget.min || session.budget.budget_min || 0);
+          const max = Number(session.budget.max || session.budget.budget_max || 0);
+          if (max && max <= 500000) normalizedBudget = 'Under ₹5 Lakhs';
+          else if (min >= 500000 && max && max <= 1000000) normalizedBudget = '₹5-10 Lakhs';
+          else if (min >= 1000000 && max && max <= 1500000) normalizedBudget = '₹10-15 Lakhs';
+          else if (min >= 1500000 && max && max <= 2000000) normalizedBudget = '₹15-20 Lakhs';
+          else if (min >= 2000000 || (!max && min >= 2000000)) normalizedBudget = 'Above ₹20 Lakhs';
+        }
+
+        if (normalizedBudget) {
+          console.log('✅ Budget present, skipping prompt. Using:', normalizedBudget);
+          session.budget = normalizedBudget;
+          session.step = 'browse_type';
+
+          const types = await (session.brand
+            ? getAvailableTypesByBrand(pool, session.budget, session.brand)
+            : getAvailableTypes(pool, session.budget));
+          // If type known, skip to brand or show cars if brand also known
+          if (session.type) {
+            const isAllType = String(session.type).toLowerCase().includes('all');
+            const matchedType = isAllType ? 'all' : findCaseInsensitiveMatch(types, session.type);
+            if (matchedType === 'all' || matchedType) {
+              session.type = matchedType === 'all' ? 'all' : matchedType;
+              session.step = 'browse_brand';
+              const precomputedBrands = await getAvailableBrands(pool, session.budget, session.type);
+              if (session.brand) {
+                const isAll = String(session.brand).toLowerCase().includes('all');
+                const matchedBrand = isAll ? 'all' : findCaseInsensitiveMatch(precomputedBrands, session.brand);
+                if (matchedBrand === 'all' || matchedBrand) {
+                  console.log('✅ Budget+Type+Brand present, showing cars');
+                  session.brand = matchedBrand === 'all' ? 'all' : matchedBrand;
+                  session.step = 'show_cars';
+                  const cars = await getCarsByFilter(pool, session.budget, session.type, session.brand);
+                  session.filteredCars = cars;
+                  session.carIndex = 0;
+                  if (cars.length === 0) {
+                    return { message: `Sorry, no cars found matching your criteria. Let's try different options.`, options: ["Change criteria"] };
+                  }
+                  return await getCarDisplayChunk(session, pool);
+                }
+              }
+              return { message: `Excellent choice! Which brand do you prefer?`, options: ['all Brand', ...precomputedBrands] };
+            }
+          }
+
+          return {
+            message: `Perfect! ${session.budget} gives you excellent options. What type of car do you prefer?`,
+            options: ['all Type', ...types]
+          };
+        }
+      }
+
+      // Default: ask for budget
+      session.step = 'browse_budget';
+      return {
+        message: "Great choice! Let's find your perfect car. First, what's your budget range?",
+        options: BUDGET_OPTIONS
+      };
+>>>>>>> 3c80ab4 (Updated the Gemini LLM)
 
     case 'browse_budget':
       console.log("🔄 Step matched: browse_budget");
@@ -191,7 +291,43 @@ async function handleBrowseUsedCars(session, userMessage) {
       console.log("📝 Updated session step to:", session.step);
       console.log("💰 Updated session budget to:", session.budget);
       
-      const types = await getAvailableTypes(pool, session.budget);
+      const types = await (session.brand
+        ? getAvailableTypesByBrand(pool, session.budget, session.brand)
+        : getAvailableTypes(pool, session.budget));
+      // If type already known in session, skip asking type
+      if (session.type) {
+        const isAllType = String(session.type).toLowerCase().includes('all');
+        const matchedType = isAllType ? 'all' : findCaseInsensitiveMatch(types, session.type);
+        if (matchedType === 'all' || matchedType) {
+          session.type = matchedType === 'all' ? 'all' : matchedType;
+          session.step = 'browse_brand';
+
+          const precomputedBrands = await getAvailableBrands(pool, session.budget, session.type);
+          // If brand already known in session, skip asking brand
+          if (session.brand) {
+            const isAll = String(session.brand).toLowerCase().includes('all');
+            const matchedBrand = isAll ? 'all' : findCaseInsensitiveMatch(precomputedBrands, session.brand);
+            if (matchedBrand === 'all' || matchedBrand) {
+              console.log("✅ Type and brand present in session, skipping prompts:", session.type, session.brand);
+              session.brand = matchedBrand === 'all' ? 'all' : matchedBrand;
+              session.step = 'show_cars';
+              const cars = await getCarsByFilter(pool, session.budget, session.type, session.brand);
+              session.filteredCars = cars;
+              session.carIndex = 0;
+              if (cars.length === 0) {
+                return { message: `Sorry, no cars found matching your criteria. Let's try different options.`, options: ["Change criteria"] };
+              }
+              return await getCarDisplayChunk(session, pool);
+            }
+          }
+
+          return {
+            message: `Excellent choice! Which brand do you prefer?`,
+            options: ['all Brand', ...precomputedBrands]
+          };
+        }
+      }
+
       return {
         message: `Perfect! ${budgetValidation.matchedOption} gives you excellent options. What type of car do you prefer?`,
         options: ['all Type', ...types]
@@ -232,7 +368,9 @@ async function handleBrowseUsedCars(session, userMessage) {
 
       const typeValidation = validateCarType(userMessage);
       if (!typeValidation.isValid) {
-        const types = await getAvailableTypes(pool, session.budget);
+        const types = await (session.brand
+          ? getAvailableTypesByBrand(pool, session.budget, session.brand)
+          : getAvailableTypes(pool, session.budget));
         const TYPE_OPTIONS = ['all Type', ...types];
         
         return {
@@ -245,10 +383,31 @@ async function handleBrowseUsedCars(session, userMessage) {
       session.type = typeValidation.matchedOption === 'all Type' ? 'all' : typeValidation.matchedOption;
       session.step = 'browse_brand';
       
-      const brands = await getAvailableBrands(pool, session.budget, session.type);
+      const precomputedBrands = await getAvailableBrands(pool, session.budget, session.type);
+      // If brand already known in session, skip asking again
+      if (session.brand) {
+        const isAll = String(session.brand).toLowerCase().includes('all');
+        const matchedBrand = isAll ? 'all' : findCaseInsensitiveMatch(precomputedBrands, session.brand);
+        if (matchedBrand === 'all' || matchedBrand) {
+          console.log("✅ Brand already present in session, skipping brand prompt:", session.brand);
+          session.brand = matchedBrand === 'all' ? 'all' : matchedBrand;
+          session.step = 'show_cars';
+          const cars = await getCarsByFilter(pool, session.budget, session.type, session.brand);
+          session.filteredCars = cars;
+          session.carIndex = 0;
+          if (cars.length === 0) {
+            return {
+              message: `Sorry, no cars found matching your criteria. Let's try different options.`,
+              options: ["Change criteria"]
+            };
+          }
+          return await getCarDisplayChunk(session, pool);
+        }
+      }
+
       return {
         message: `Excellent choice! Which brand do you prefer?`,
-        options: ['all Brand', ...brands]
+        options: ['all Brand', ...precomputedBrands]
       };
 
     case 'browse_brand':
@@ -383,6 +542,15 @@ async function handleBrowseUsedCars(session, userMessage) {
           options: BUDGET_OPTIONS
         };
       }
+
+    case 'test_drive_start':
+      console.log("🔄 Step matched: test_drive_start");
+      // Allow direct entry into test drive scheduling
+      session.step = 'test_drive_date';
+      return {
+        message: "Excellent! Let's schedule your test drive. When would you prefer?",
+        options: ["Today", "Tomorrow", "Later this Week", "Next Week"]
+      };
 
     case 'test_drive_date':
       console.log("🔄 Step matched: test_drive_date");

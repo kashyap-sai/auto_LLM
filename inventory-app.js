@@ -11,6 +11,8 @@ const PDFDocument = require('pdfkit');
 const pool = require('./db');
 // Using local file storage only
 console.log('📁 Using local file storage');
+// Absolute uploads root to avoid cwd issues in production
+const UPLOADS_ROOT = path.join(__dirname, 'uploads');
 
 // Helper function to get image URL (local storage)
 function getImageUrl(imagePath) {
@@ -18,7 +20,7 @@ function getImageUrl(imagePath) {
     
     // For local storage, check if file actually exists before returning URL
     if (imagePath.startsWith('uploads/')) {
-        const filePath = path.resolve(imagePath);
+        const filePath = path.join(__dirname, imagePath);
         if (fs.existsSync(filePath)) {
             const baseUrl = process.env.BASE_URL || `http://localhost:${PORT}`;
             return `${baseUrl}/${imagePath}`;
@@ -158,6 +160,65 @@ async function initializeDatabase() {
             console.log('✅ Database tables created successfully');
         }
         
+        // Ensure additional tables always exist in any environment
+        console.log('🔧 Ensuring required reporting tables exist...');
+
+        // message_logs
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS message_logs (
+                id SERIAL PRIMARY KEY,
+                phone_number VARCHAR(20) NOT NULL,
+                message_type VARCHAR(50) NOT NULL,
+                message_content TEXT,
+                response_sent BOOLEAN DEFAULT false,
+                response_content TEXT,
+                session_id VARCHAR(100),
+                user_agent TEXT,
+                ip_address INET,
+                intent VARCHAR(50),
+                entities JSONB,
+                confidence DECIMAL(4,3),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        await client.query('CREATE INDEX IF NOT EXISTS idx_message_logs_phone ON message_logs(phone_number)');
+        await client.query('CREATE INDEX IF NOT EXISTS idx_message_logs_type ON message_logs(message_type)');
+        await client.query('CREATE INDEX IF NOT EXISTS idx_message_logs_created_at ON message_logs(created_at)');
+        await client.query('CREATE INDEX IF NOT EXISTS idx_message_logs_intent ON message_logs(intent)');
+
+        // test_drives (minimal schema used by reports)
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS test_drives (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100),
+                phone VARCHAR(20),
+                car VARCHAR(150),
+                datetime TIMESTAMP,
+                has_dl BOOLEAN,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // car_valuations (schema used by exports/PDF)
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS car_valuations (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100),
+                phone VARCHAR(20),
+                location VARCHAR(150),
+                brand VARCHAR(50),
+                model VARCHAR(50),
+                year VARCHAR(10),
+                fuel VARCHAR(20),
+                kms VARCHAR(30),
+                owner VARCHAR(30),
+                condition VARCHAR(50),
+                submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        console.log('✅ Reporting tables ensured.');
+
         client.release();
         console.log('✅ Database initialization completed');
     } catch (error) {
@@ -171,8 +232,13 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
-// Serve uploaded files (always enable for existing local images)
-app.use('/uploads', express.static('uploads'));
+// Ensure uploads root exists
+if (!fs.existsSync(UPLOADS_ROOT)) {
+    fs.mkdirSync(UPLOADS_ROOT, { recursive: true });
+}
+
+// Serve uploaded files (always enable for existing local images) via absolute path
+app.use('/uploads', express.static(UPLOADS_ROOT));
 console.log('📁 Static file serving enabled for uploads (handles existing local images)');
 
       // Session configuration
@@ -186,7 +252,7 @@ console.log('📁 Static file serving enabled for uploads (handles existing loca
 // Multer configuration for file uploads
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        const uploadDir = 'uploads/';
+        const uploadDir = UPLOADS_ROOT;
         if (!fs.existsSync(uploadDir)) {
             fs.mkdirSync(uploadDir, { recursive: true });
         }
@@ -217,14 +283,14 @@ const imageUploadStorage = multer.diskStorage({
         
         if (!registrationNumber || registrationNumber === 'unknown') {
             // Save to a temporary directory if no registration number
-            const tempDir = 'uploads/cars/temp';
+            const tempDir = path.join(UPLOADS_ROOT, 'cars', 'temp');
             if (!fs.existsSync(tempDir)) {
                 fs.mkdirSync(tempDir, { recursive: true });
             }
             cb(null, tempDir);
         } else {
             // Save to the proper car directory
-            const carDir = `uploads/cars/${registrationNumber}/`;
+            const carDir = path.join(UPLOADS_ROOT, 'cars', registrationNumber);
             if (!fs.existsSync(carDir)) {
                 fs.mkdirSync(carDir, { recursive: true });
             }
@@ -861,7 +927,7 @@ app.post('/api/upload-car-images', authenticateToken, imageUpload.array('images'
             const filename = `${registrationNumber}_${parseInt(imageIndex) + 1}.jpg`;
             
             // Determine the correct car directory
-            const carDir = path.join('uploads', 'cars', registrationNumber);
+            const carDir = path.join(UPLOADS_ROOT, 'cars', registrationNumber);
             if (!fs.existsSync(carDir)) {
                 fs.mkdirSync(carDir, { recursive: true });
                 console.log(`📁 Created car directory: ${carDir}`);
@@ -1144,7 +1210,7 @@ app.get('/api/test-drive-bookings', authenticateToken, async (req, res) => {
 // Image serving endpoint for existing local images
 app.get('/uploads/cars/:registration/:filename', (req, res) => {
     const { registration, filename } = req.params;
-    const imagePath = path.join('uploads', 'cars', registration, filename);
+    const imagePath = path.join(UPLOADS_ROOT, 'cars', registration, filename);
     
     console.log(`🔍 Image request: ${registration}/${filename}`);
     console.log(`📁 Full path: ${imagePath}`);
@@ -1152,7 +1218,7 @@ app.get('/uploads/cars/:registration/:filename', (req, res) => {
     
     if (fs.existsSync(imagePath)) {
         console.log(`✅ Serving local image: ${imagePath}`);
-        res.sendFile(path.resolve(imagePath));
+        res.sendFile(imagePath);
     } else {
         // If local file doesn't exist, return a simple 404
         console.log(`❌ Local file missing: ${imagePath}`);

@@ -48,7 +48,98 @@ if (session.conversationEnded && (lowerMsg.includes('start') || lowerMsg.include
     return null; // Return null to indicate no message should be sent
   }
 
+  // Intent-driven dynamic routing using Gemini
+  const intent = session.lastIntent;
+  const entities = session.lastEntities || {};
+  const confidence = typeof session.lastConfidence === 'number' ? session.lastConfidence : 0;
 
+  // Helper: seed session from extracted entities for each flow
+  const seedFromEntities = () => {
+    // Browse cars
+    if (entities.brand) session.brand = entities.brand;
+    if (entities.model) session.model = entities.model;
+    if (entities.type) session.type = entities.type;
+    if (entities.fuel_type) session.fuel = entities.fuel_type;
+    if (typeof entities.budget_min === 'number' || typeof entities.budget_max === 'number') {
+      session.budget = {
+        min: typeof entities.budget_min === 'number' ? entities.budget_min : undefined,
+        max: typeof entities.budget_max === 'number' ? entities.budget_max : undefined
+      };
+    }
+
+    // Valuation
+    if (entities.year) session.year = entities.year;
+    if (entities.kms) session.kms = entities.kms;
+    if (entities.owner) session.owner = entities.owner;
+    if (entities.condition) session.condition = entities.condition;
+    if (entities.location) session.location = entities.location;
+    if (entities.phone) session.phone = entities.phone;
+
+    // Test drive specifics
+    if (entities.test_drive_date) session.testDriveDate = entities.test_drive_date;
+    if (entities.test_drive_time) session.testDriveTime = entities.test_drive_time;
+  };
+
+  if (intent) {
+    const inActiveFlow = !!session.step && (
+      session.step.startsWith('browse') ||
+      session.step === 'show_more_cars' ||
+      session.step === 'show_more_cars_after_images' ||
+      session.step === 'car_selected_options' ||
+      session.step.startsWith('test_drive') ||
+      session.step.startsWith('td_') ||
+      session.step.startsWith('valuation') ||
+      session.step.startsWith('contact') ||
+      session.step.startsWith('about')
+    );
+
+    // Only ask for clarification if NOT already in an active flow
+    if (confidence < 0.6 && session.step !== 'intent_clarify' && !inActiveFlow) {
+      session.step = 'intent_clarify';
+      return {
+        message: 'Just to confirm—what would you like to do?',
+        options: ['🚗 Browse Used Cars', '💰 Get Car Valuation', '📞 Contact Our Team', 'Book a Test Drive']
+      };
+    }
+
+    // Proceed by intent (or continue current flow) and seed entities
+    seedFromEntities();
+    switch (intent) {
+      case 'browse_cars': {
+        session.step = session.step?.startsWith('browse') ? session.step : 'browse_start';
+        return handleBrowseUsedCars(session, message, pool);
+      }
+      case 'car_valuation': {
+        session.step = session.step?.startsWith('valuation') ? session.step : 'valuation_start';
+        return handleCarValuationStep(session, message);
+      }
+      case 'test_drive': {
+        // Test drive flow is implemented within browse/test drive steps
+        if (!session.step || !session.step.startsWith('test_drive')) {
+          session.step = 'test_drive_start';
+        }
+        return handleBrowseUsedCars(session, message, pool);
+      }
+      case 'contact_team': {
+        // Seed contact details if present
+        if (entities.name) session.callback_name = entities.name;
+        if (entities.phone) session.contact_callback_phone = entities.phone;
+        if (entities.reason) session.callback_reason = entities.reason;
+        session.step = session.step?.startsWith('contact') ? session.step : 'contact_start';
+        return handleContactUsStep(session, message);
+      }
+      case 'about_us': {
+        session.step = session.step?.startsWith('about') ? session.step : 'about_start';
+        return handleAboutUsStep(session, message);
+      }
+      case 'greeting': {
+        session.step = 'main_menu';
+        return getMainMenu();
+      }
+      default:
+        break;
+    }
+  }
 
   // Route based on step or keywords
   if (session.step && (session.step.startsWith('valuation') || 
@@ -116,6 +207,13 @@ if (session.conversationEnded && (lowerMsg.includes('start') || lowerMsg.include
     session.step = 'contact_start';
     console.log("💬 Keyword matched: contact → Routing to Contact Us");
     return handleContactUsStep(session, message);
+  }
+
+  // Explicit option for booking a test drive
+  if (lowerMsg.includes('test drive') || message === 'Book a Test Drive') {
+    session.step = 'test_drive_start';
+    console.log("💬 Keyword matched: test drive → Routing to Test Drive flow");
+    return handleBrowseUsedCars(session, message, pool);
   }
 
   if (lowerMsg.includes('about') || message === "ℹ️ About Us") {

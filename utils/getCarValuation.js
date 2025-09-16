@@ -73,6 +73,7 @@ async function handleCarValuationStep(session, userMessage) {
   switch (state) {
     case 'start':
     case 'valuation_start':
+<<<<<<< HEAD
       // Skip steps if prefilled
       if (!session.brand) {
         session.step = 'brand';
@@ -82,6 +83,10 @@ async function handleCarValuationStep(session, userMessage) {
         };
       }
       if (!session.model) {
+=======
+      // If brand already present (from intent/entities), skip brand step
+      if (session.brand) {
+>>>>>>> 3c80ab4 (Updated the Gemini LLM)
         session.step = 'model';
         const models = await getModelsByBrand(pool, session.brand);
         return {
@@ -89,6 +94,7 @@ async function handleCarValuationStep(session, userMessage) {
           options: [...models, `Other ${session.brand} models`]
         };
       }
+<<<<<<< HEAD
       if (!session.year) {
         session.step = 'year';
         return {
@@ -127,6 +133,13 @@ async function handleCarValuationStep(session, userMessage) {
       // If details already provided, jump to name collection
       session.step = 'name';
       return { message: "Great! We'd love to purchase your car. Let me collect your details:\n\n1. Your Name:" };
+=======
+      session.step = 'brand';
+      return {
+        message: "Great! I'll help you get a valuation for your car. Let's start with some basic details.\n\nFirst, which brand is your car?",
+        options: [...await getAllBrands(pool), "Other brands"]
+      };
+>>>>>>> 3c80ab4 (Updated the Gemini LLM)
 
     case 'brand':
       if (userMessage === 'Other brands') {

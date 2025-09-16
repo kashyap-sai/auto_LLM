@@ -119,6 +119,88 @@ async function getAvailableTypes(pool, budget) {
   }
 }
 
+// Get available types constrained by a specific brand and optional budget
+async function getAvailableTypesByBrand(pool, budget, brand) {
+  try {
+    if (!brand) {
+      return await getAvailableTypes(pool, budget);
+    }
+
+    let query = 'SELECT DISTINCT model, variant FROM cars WHERE brand = $1';
+    let params = [brand];
+    let paramCount = 1;
+
+    if (budget && budget !== 'Any') {
+      let minPrice = 0;
+      let maxPrice = 999999999;
+
+      if (budget.includes('Under ₹5')) {
+        maxPrice = 500000;
+      } else if (budget.includes('₹5-10')) {
+        minPrice = 500000;
+        maxPrice = 1000000;
+      } else if (budget.includes('₹10-15')) {
+        minPrice = 1000000;
+        maxPrice = 1500000;
+      } else if (budget.includes('₹15-20')) {
+        minPrice = 1500000;
+        maxPrice = 2000000;
+      } else if (budget.includes('Above ₹20')) {
+        minPrice = 2000000;
+      }
+
+      paramCount++;
+      query += ` AND CAST(price AS NUMERIC) >= $${paramCount}`;
+      params.push(minPrice);
+
+      if (maxPrice < 999999999) {
+        paramCount++;
+        query += ` AND CAST(price AS NUMERIC) <= $${paramCount}`;
+        params.push(maxPrice);
+      }
+    }
+
+    query += ' ORDER BY model, variant';
+
+    console.log('🔍 Types-by-brand query:', query);
+    console.log('📊 Types-by-brand params:', params);
+
+    const res = await retryQuery(pool, async () => {
+      return await pool.query(query, params);
+    });
+
+    const typeMap = new Map();
+    res.rows.forEach(row => {
+      const model = row.model?.toLowerCase() || '';
+      const variant = row.variant?.toLowerCase() || '';
+
+      if (model.includes('swift') || model.includes('i10') || model.includes('alto') || model.includes('celerio')) {
+        typeMap.set('Hatchback', true);
+      } else if (model.includes('city') || model.includes('verna') || model.includes('amaze') || model.includes('dzire')) {
+        typeMap.set('Sedan', true);
+      } else if (model.includes('creta') || model.includes('venue') || model.includes('brezza') || model.includes('xuv')) {
+        typeMap.set('SUV', true);
+      } else if (model.includes('thar') || model.includes('scorpio')) {
+        typeMap.set('SUV', true);
+      } else if (model.includes('innova') || model.includes('ertiga') || model.includes('carens')) {
+        typeMap.set('MUV', true);
+      }
+    });
+
+    const types = Array.from(typeMap.keys());
+    if (types.length === 0) {
+      console.log(`📭 No types found for brand ${brand} with current filters; falling back to generic types`);
+      types.push('Hatchback', 'Sedan', 'SUV', 'MUV');
+    }
+
+    console.log(`📈 Found ${types.length} car types for brand ${brand}:`, types);
+    return types;
+  } catch (error) {
+    console.error('Error fetching car types by brand:', error);
+    return ['Hatchback', 'Sedan', 'SUV', 'MUV'];
+  }
+}
+
 async function getAvailableBrands(pool, budget, type) {
   try {
     // Build query to get available brands from your actual cars table
@@ -341,6 +423,7 @@ module.exports = {
   getModelsByBrand,
   formatRupees,
   getAvailableTypes,
+  getAvailableTypesByBrand,
   getAvailableBrands,
   getCarsByFilter,
   getCarImages,

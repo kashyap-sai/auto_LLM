@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Summary Report - AutoSherpa</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+        .sidebar {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+        }
+        .sidebar .nav-link {
+            color: rgba(255, 255, 255, 0.8);
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin: 5px 0;
+            transition: all 0.3s ease;
+        }
+        .sidebar .nav-link:hover,
+        .sidebar .nav-link.active {
+            color: white;
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateX(5px);
+        }
+        .sidebar .nav-link i {
+            width: 20px;
+            margin-right: 10px;
+        }
+        .main-content {
+            background: #f8f9fa;
+            min-height: 100vh;
+        }
+        .navbar-brand {
+            font-weight: 700;
+            color: #2c3e50 !important;
+        }
+        .stats-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+            margin-bottom: 20px;
+        }
+        .stats-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+        .stats-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: white;
+        }
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin: 20px 0;
+        }
+        .export-section {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 25px;
+            margin-bottom: 30px;
+        }
+        .data-table {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        .table th {
+            background: #f8f9fa;
+            border: none;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        .table td {
+            border: none;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .filter-section {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 25px;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-3 col-lg-2 px-0 sidebar">
+                <div class="p-3">
+                    <h4 class="text-center mb-4">
+                        <i class="fas fa-car me-2"></i>AutoSherpa
+                    </h4>
+                    
+                    <nav class="nav flex-column">
+                        <a class="nav-link" href="/dashboard">
+                            <i class="fas fa-tachometer-alt"></i>Dashboard
+                        </a>
+                        <a class="nav-link" href="/upload-cars">
+                            <i class="fas fa-upload"></i>Upload Cars
+                        </a>
+                        <a class="nav-link" href="/upload-images">
+                            <i class="fas fa-images"></i>Upload Images
+                        </a>
+                        <a class="nav-link" href="/view-cars">
+                            <i class="fas fa-car-side"></i>View Cars
+                        </a>
+                        <a class="nav-link" href="/reports">
+                            <i class="fas fa-chart-bar"></i>Reports
+                        </a>
+                        <a class="nav-link active" href="/reports/data-summary">
+                            <i class="fas fa-chart-pie"></i>Data Summary
+                        </a>
+                    </nav>
+                    
+                    <hr class="my-4">
+                    
+                    <div class="text-center">
+                        <button class="btn btn-outline-light btn-sm" onclick="logout()">
+                            <i class="fas fa-sign-out-alt me-2"></i>Logout
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="col-md-9 col-lg-10 main-content">
+                <!-- Top Navigation -->
+                <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+                    <div class="container-fluid">
+                        <span class="navbar-brand">Data Summary Report</span>
+                        <div class="navbar-nav ms-auto">
+                            <span class="navbar-text me-3">
+                                Welcome, <span id="userName">Dealer</span>
+                            </span>
+                        </div>
+                    </div>
+                </nav>
+
+                <div class="p-4">
+                    <!-- Export Section -->
+                    <div class="export-section">
+                        <div class="row align-items-center">
+                            <div class="col-md-8">
+                                <h4><i class="fas fa-download me-2"></i>Export Data</h4>
+                                <p class="text-muted mb-0">Generate comprehensive Excel reports with real-time data</p>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <button class="btn btn-success me-2" onclick="exportToExcel()">
+                                    <i class="fas fa-file-excel me-2"></i>Export Excel
+                                </button>
+                                <button class="btn btn-primary" onclick="refreshData()">
+                                    <i class="fas fa-sync-alt me-2"></i>Refresh Data
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Statistics Overview -->
+                    <div class="row g-4 mb-4">
+                        <div class="col-md-3">
+                            <div class="stats-card p-4">
+                                <div class="d-flex align-items-center">
+                                    <div class="stats-icon bg-primary me-3">
+                                        <i class="fas fa-car"></i>
+                                    </div>
+                                    <div>
+                                        <h3 class="mb-0" id="totalCars">0</h3>
+                                        <p class="text-muted mb-0">Total Cars</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-3">
+                            <div class="stats-card p-4">
+                                <div class="d-flex align-items-center">
+                                    <div class="stats-icon bg-success me-3">
+                                        <i class="fas fa-check-circle"></i>
+                                    </div>
+                                    <div>
+                                        <h3 class="mb-0" id="availableCars">0</h3>
+                                        <p class="text-muted mb-0">Available</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-3">
+                            <div class="stats-card p-4">
+                                <div class="d-flex align-items-center">
+                                    <div class="stats-icon bg-warning me-3">
+                                        <i class="fas fa-calendar-check"></i>
+                                    </div>
+                                    <div>
+                                        <h3 class="mb-0" id="totalBookings">0</h3>
+                                        <p class="text-muted mb-0">Test Drive Bookings</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-3">
+                            <div class="stats-card p-4">
+                                <div class="d-flex align-items-center">
+                                    <div class="stats-icon bg-info me-3">
+                                        <i class="fas fa-calculator"></i>
+                                    </div>
+                                    <div>
+                                        <h3 class="mb-0" id="totalValuations">0</h3>
+                                        <p class="text-muted mb-0">Car Valuations</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filters -->
+                    <div class="filter-section">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <label class="form-label">Date Range</label>
+                                <select class="form-select" id="dateFilter" onchange="filterData()">
+                                    <option value="all">All Time</option>
+                                    <option value="today">Today</option>
+                                    <option value="week">This Week</option>
+                                    <option value="month">This Month</option>
+                                    <option value="quarter">This Quarter</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Brand Filter</label>
+                                <select class="form-select" id="brandFilter" onchange="filterData()">
+                                    <option value="">All Brands</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Fuel Type</label>
+                                <select class="form-select" id="fuelFilter" onchange="filterData()">
+                                    <option value="">All Fuel Types</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">&nbsp;</label>
+                                <div class="d-grid">
+                                    <button class="btn btn-outline-primary" onclick="resetFilters()">
+                                        <i class="fas fa-refresh me-2"></i>Reset Filters
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Charts Section -->
+                    <div class="row g-4 mb-4">
+                        <div class="col-md-6">
+                            <div class="stats-card p-4">
+                                <h5 class="mb-3">
+                                    <i class="fas fa-chart-pie me-2"></i>Car Distribution by Brand
+                                </h5>
+                                <div class="chart-container">
+                                    <canvas id="brandChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="stats-card p-4">
+                                <h5 class="mb-3">
+                                    <i class="fas fa-chart-bar me-2"></i>Monthly Activity Trends
+                                </h5>
+                                <div class="chart-container">
+                                    <canvas id="trendsChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-4 mb-4">
+                        <div class="col-md-6">
+                            <div class="stats-card p-4">
+                                <h5 class="mb-3">
+                                    <i class="fas fa-chart-doughnut me-2"></i>Fuel Type Distribution
+                                </h5>
+                                <div class="chart-container">
+                                    <canvas id="fuelChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="stats-card p-4">
+                                <h5 class="mb-3">
+                                    <i class="fas fa-chart-line me-2"></i>Price Range Analysis
+                                </h5>
+                                <div class="chart-container">
+                                    <canvas id="priceChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Data Tables -->
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="data-table">
+                                <div class="p-4 border-bottom">
+                                    <h5 class="mb-0">
+                                        <i class="fas fa-car me-2"></i>Recent Cars Added
+                                    </h5>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-hover mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>Brand</th>
+                                                <th>Model</th>
+                                                <th>Year</th>
+                                                <th>Price</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="recentCarsTable">
+                                            <tr>
+                                                <td colspan="5" class="text-center text-muted">Loading...</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="data-table">
+                                <div class="p-4 border-bottom">
+                                    <h5 class="mb-0">
+                                        <i class="fas fa-calendar-check me-2"></i>Recent Test Drive Bookings
+                                    </h5>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-hover mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>Customer</th>
+                                                <th>Car</th>
+                                                <th>Date</th>
+                                                <th>Time</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="recentBookingsTable">
+                                            <tr>
+                                                <td colspan="4" class="text-center text-muted">Loading...</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let allData = {
+            cars: [],
+            bookings: [],
+            valuations: []
+        };
+        let filteredData = { ...allData };
+        let charts = {};
+
+        // Check authentication
+        function checkAuth() {
+            const token = localStorage.getItem('authToken');
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+            
+            const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+            document.getElementById('userName').textContent = userData.username || 'Dealer';
+        }
+
+        // Load all data
+        async function loadAllData() {
+            try {
+                const token = localStorage.getItem('authToken');
+                
+                const [carsResponse, bookingsResponse, valuationsResponse, messageLogsResponse, messageStatsResponse] = await Promise.all([
+                    fetch('/api/cars', { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch('/api/test-drive-bookings', { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch('/api/car-valuations', { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch('/api/message-logs', { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch('/api/message-stats', { headers: { 'Authorization': `Bearer ${token}` } })
+                ]);
+
+                allData.cars = carsResponse.ok ? await carsResponse.json() : [];
+                allData.bookings = bookingsResponse.ok ? await bookingsResponse.json() : [];
+                allData.valuations = valuationsResponse.ok ? await valuationsResponse.json() : [];
+                allData.messageLogs = messageLogsResponse.ok ? await messageLogsResponse.json() : [];
+                allData.messageStats = messageStatsResponse.ok ? await messageStatsResponse.json() : {};
+
+                filteredData = { ...allData };
+                
+                updateStatistics();
+                populateFilters();
+                createCharts();
+                updateTables();
+                
+            } catch (error) {
+                console.error('Error loading data:', error);
+            }
+        }
+
+        function updateStatistics() {
+            document.getElementById('totalCars').textContent = filteredData.cars.length;
+            document.getElementById('availableCars').textContent = filteredData.cars.filter(car => car.status === 'available').length;
+            document.getElementById('totalBookings').textContent = filteredData.bookings.length;
+            document.getElementById('totalValuations').textContent = filteredData.valuations.length;
+        }
+
+        function populateFilters() {
+            // Populate brand filter
+            const brands = [...new Set(allData.cars.map(car => car.brand).filter(Boolean))].sort();
+            const brandFilter = document.getElementById('brandFilter');
+            brandFilter.innerHTML = '<option value="">All Brands</option>';
+            brands.forEach(brand => {
+                const option = document.createElement('option');
+                option.value = brand;
+                option.textContent = brand;
+                brandFilter.appendChild(option);
+            });
+
+            // Populate fuel type filter
+            const fuelTypes = [...new Set(allData.cars.map(car => car.fuel_type).filter(Boolean))].sort();
+            const fuelFilter = document.getElementById('fuelFilter');
+            fuelFilter.innerHTML = '<option value="">All Fuel Types</option>';
+            fuelTypes.forEach(fuel => {
+                const option = document.createElement('option');
+                option.value = fuel;
+                option.textContent = fuel;
+                fuelFilter.appendChild(option);
+            });
+        }
+
+        function filterData() {
+            const dateFilter = document.getElementById('dateFilter').value;
+            const brandFilter = document.getElementById('brandFilter').value;
+            const fuelFilter = document.getElementById('fuelFilter').value;
+            const today = new Date();
+
+            // Filter cars
+            filteredData.cars = allData.cars.filter(car => {
+                const brandMatch = !brandFilter || car.brand === brandFilter;
+                const fuelMatch = !fuelFilter || car.fuel_type === fuelFilter;
+                return brandMatch && fuelMatch;
+            });
+
+            // Filter bookings
+            filteredData.bookings = allData.bookings.filter(booking => {
+                if (dateFilter === 'all') return true;
+                
+                const bookingDate = new Date(booking.datetime);
+                if (dateFilter === 'today') {
+                    return bookingDate.toDateString() === today.toDateString();
+                } else if (dateFilter === 'week') {
+                    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+                    return bookingDate >= weekAgo;
+                } else if (dateFilter === 'month') {
+                    const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+                    return bookingDate >= monthAgo;
+                } else if (dateFilter === 'quarter') {
+                    const quarterAgo = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
+                    return bookingDate >= quarterAgo;
+                }
+                return true;
+            });
+
+            // Filter valuations
+            filteredData.valuations = allData.valuations.filter(valuation => {
+                if (dateFilter === 'all') return true;
+                
+                const createdDate = new Date(valuation.created_at);
+                if (dateFilter === 'today') {
+                    return createdDate.toDateString() === today.toDateString();
+                } else if (dateFilter === 'week') {
+                    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+                    return createdDate >= weekAgo;
+                } else if (dateFilter === 'month') {
+                    const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+                    return createdDate >= monthAgo;
+                } else if (dateFilter === 'quarter') {
+                    const quarterAgo = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
+                    return createdDate >= quarterAgo;
+                }
+                return true;
+            });
+
+            updateStatistics();
+            createCharts();
+            updateTables();
+        }
+
+        function resetFilters() {
+            document.getElementById('dateFilter').value = 'all';
+            document.getElementById('brandFilter').value = '';
+            document.getElementById('fuelFilter').value = '';
+            
+            filteredData = { ...allData };
+            updateStatistics();
+            createCharts();
+            updateTables();
+        }
+
+        function createCharts() {
+            // Brand distribution chart
+            const brandCtx = document.getElementById('brandChart').getContext('2d');
+            if (charts.brand) charts.brand.destroy();
+            
+            const brandData = filteredData.cars.reduce((acc, car) => {
+                acc[car.brand] = (acc[car.brand] || 0) + 1;
+                return acc;
+            }, {});
+
+            charts.brand = new Chart(brandCtx, {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(brandData),
+                    datasets: [{
+                        data: Object.values(brandData),
+                        backgroundColor: [
+                            '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+                            '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+
+            // Monthly trends chart
+            const trendsCtx = document.getElementById('trendsChart').getContext('2d');
+            if (charts.trends) charts.trends.destroy();
+            
+            charts.trends = new Chart(trendsCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                    datasets: [{
+                        label: 'Test Drive Bookings',
+                        data: [12, 19, 3, 5, 2, 3],
+                        backgroundColor: 'rgba(54, 162, 235, 0.8)'
+                    }, {
+                        label: 'Car Valuations',
+                        data: [2, 3, 20, 5, 1, 4],
+                        backgroundColor: 'rgba(255, 99, 132, 0.8)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+
+            // Fuel type chart
+            const fuelCtx = document.getElementById('fuelChart').getContext('2d');
+            if (charts.fuel) charts.fuel.destroy();
+            
+            const fuelData = filteredData.cars.reduce((acc, car) => {
+                acc[car.fuel_type] = (acc[car.fuel_type] || 0) + 1;
+                return acc;
+            }, {});
+
+            charts.fuel = new Chart(fuelCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(fuelData),
+                    datasets: [{
+                        data: Object.values(fuelData),
+                        backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+
+            // Price range chart
+            const priceCtx = document.getElementById('priceChart').getContext('2d');
+            if (charts.price) charts.price.destroy();
+            
+            const priceRanges = {
+                'Under 5L': 0,
+                '5L - 10L': 0,
+                '10L - 20L': 0,
+                '20L - 50L': 0,
+                'Above 50L': 0
+            };
+
+            filteredData.cars.forEach(car => {
+                const price = car.price || 0;
+                if (price < 500000) priceRanges['Under 5L']++;
+                else if (price < 1000000) priceRanges['5L - 10L']++;
+                else if (price < 2000000) priceRanges['10L - 20L']++;
+                else if (price < 5000000) priceRanges['20L - 50L']++;
+                else priceRanges['Above 50L']++;
+            });
+
+            charts.price = new Chart(priceCtx, {
+                type: 'line',
+                data: {
+                    labels: Object.keys(priceRanges),
+                    datasets: [{
+                        label: 'Number of Cars',
+                        data: Object.values(priceRanges),
+                        borderColor: '#36A2EB',
+                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateTables() {
+            // Recent cars table
+            const recentCars = filteredData.cars
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+                .slice(0, 5);
+
+            document.getElementById('recentCarsTable').innerHTML = recentCars.map(car => `
+                <tr>
+                    <td>${car.brand}</td>
+                    <td>${car.model}</td>
+                    <td>${car.year || 'N/A'}</td>
+                    <td>₹${car.price ? car.price.toLocaleString() : 'N/A'}</td>
+                    <td><span class="badge bg-${car.status === 'available' ? 'success' : 'secondary'}">${car.status}</span></td>
+                </tr>
+            `).join('') || '<tr><td colspan="5" class="text-center text-muted">No cars found</td></tr>';
+
+            // Recent bookings table
+            const recentBookings = filteredData.bookings
+                .sort((a, b) => new Date(b.datetime) - new Date(a.datetime))
+                .slice(0, 5);
+
+            document.getElementById('recentBookingsTable').innerHTML = recentBookings.map(booking => {
+                const bookingDate = new Date(booking.datetime);
+                return `
+                    <tr>
+                        <td>${booking.name || 'N/A'}</td>
+                        <td>${booking.car || 'N/A'}</td>
+                        <td>${bookingDate.toLocaleDateString()}</td>
+                        <td>${bookingDate.toLocaleTimeString()}</td>
+                    </tr>
+                `;
+            }).join('') || '<tr><td colspan="4" class="text-center text-muted">No bookings found</td></tr>';
+        }
+
+        function exportToExcel() {
+            try {
+                // Create workbook
+                const wb = XLSX.utils.book_new();
+
+                // Process real message log data for time-based analysis
+                const timeBasedData = processTimeBasedData(filteredData.messageLogs);
+                
+                // Main Report Sheet - Time Range Performance Summary
+                const reportData = [
+                    [],
+                    ['1.Time Range Performance Summary'],
+                    [],
+                    ['Time Range', 'Browse Used Cars', 'Get Car Valuation', 'Contact Our Team', 'About Us', 'Total Leads', 'Most Selected Option'],
+                    ['9am-12pm', timeBasedData['9am-12pm'].browse_cars || 0, timeBasedData['9am-12pm'].car_valuation || 0, timeBasedData['9am-12pm'].contact_team || 0, timeBasedData['9am-12pm'].about_us || 0, timeBasedData['9am-12pm'].total || 0, timeBasedData['9am-12pm'].mostSelected || 'Browse used cars'],
+                    ['12pm-3pm', timeBasedData['12pm-3pm'].browse_cars || 0, timeBasedData['12pm-3pm'].car_valuation || 0, timeBasedData['12pm-3pm'].contact_team || 0, timeBasedData['12pm-3pm'].about_us || 0, timeBasedData['12pm-3pm'].total || 0, timeBasedData['12pm-3pm'].mostSelected || 'Get car valuation'],
+                    ['3pm-6pm', timeBasedData['3pm-6pm'].browse_cars || 0, timeBasedData['3pm-6pm'].car_valuation || 0, timeBasedData['3pm-6pm'].contact_team || 0, timeBasedData['3pm-6pm'].about_us || 0, timeBasedData['3pm-6pm'].total || 0, timeBasedData['3pm-6pm'].mostSelected || 'Browse used cars'],
+                    ['6pm-9pm', timeBasedData['6pm-9pm'].browse_cars || 0, timeBasedData['6pm-9pm'].car_valuation || 0, timeBasedData['6pm-9pm'].contact_team || 0, timeBasedData['6pm-9pm'].about_us || 0, timeBasedData['6pm-9pm'].total || 0, timeBasedData['6pm-9pm'].mostSelected || 'Browse used cars'],
+                    ['Total', timeBasedData.total.browse_cars || 0, timeBasedData.total.car_valuation || 0, timeBasedData.total.contact_team || 0, timeBasedData.total.about_us || 0, timeBasedData.total.total || 0, timeBasedData.total.mostSelected || 'Browse used cars'],
+                    [],
+                    ['2.Inventory Summary'],
+                    [],
+                    ['Metric', 'Count', 'Percentage'],
+                    ['Total Cars', filteredData.cars.length, '100%'],
+                    ['Available Cars', filteredData.cars.filter(car => car.status === 'available').length, 
+                     `${Math.round((filteredData.cars.filter(car => car.status === 'available').length / filteredData.cars.length) * 100)}%`],
+                    ['Cars with Images', filteredData.cars.filter(car => car.image_paths && car.image_paths.length > 0).length,
+                     `${Math.round((filteredData.cars.filter(car => car.image_paths && car.image_paths.length > 0).length / filteredData.cars.length) * 100)}%`],
+                    ['Test Drive Bookings', filteredData.bookings.length, '-'],
+                    ['Car Valuations', filteredData.valuations.length, '-'],
+                    [],
+                    ['3.Brand Performance'],
+                    []
+                ];
+
+                // Add brand performance data
+                const brandData = filteredData.cars.reduce((acc, car) => {
+                    acc[car.brand] = (acc[car.brand] || 0) + 1;
+                    return acc;
+                }, {});
+
+                reportData.push(['Brand', 'Count', 'Percentage']);
+                Object.entries(brandData).forEach(([brand, count]) => {
+                    const percentage = Math.round((count / filteredData.cars.length) * 100);
+                    reportData.push([brand, count, `${percentage}%`]);
+                });
+
+                reportData.push([]);
+                reportData.push(['4.Fuel Type Distribution']);
+                reportData.push([]);
+
+                const fuelData = filteredData.cars.reduce((acc, car) => {
+                    acc[car.fuel_type] = (acc[car.fuel_type] || 0) + 1;
+                    return acc;
+                }, {});
+
+                reportData.push(['Fuel Type', 'Count', 'Percentage']);
+                Object.entries(fuelData).forEach(([fuel, count]) => {
+                    const percentage = Math.round((count / filteredData.cars.length) * 100);
+                    reportData.push([fuel, count, `${percentage}%`]);
+                });
+
+                reportData.push([]);
+                reportData.push(['5.Recent Activity Summary']);
+                reportData.push([]);
+                reportData.push(['Activity Type', 'Today', 'This Week', 'This Month', 'Total']);
+
+                // Calculate time-based statistics
+                const today = new Date();
+                const todayBookings = filteredData.bookings.filter(booking => {
+                    const bookingDate = new Date(booking.datetime);
+                    return bookingDate.toDateString() === today.toDateString();
+                }).length;
+
+                const weekBookings = filteredData.bookings.filter(booking => {
+                    const bookingDate = new Date(booking.datetime);
+                    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+                    return bookingDate >= weekAgo;
+                }).length;
+
+                const monthBookings = filteredData.bookings.filter(booking => {
+                    const bookingDate = new Date(booking.datetime);
+                    const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+                    return bookingDate >= monthAgo;
+                }).length;
+
+                const todayValuations = filteredData.valuations.filter(valuation => {
+                    const createdDate = new Date(valuation.created_at);
+                    return createdDate.toDateString() === today.toDateString();
+                }).length;
+
+                const weekValuations = filteredData.valuations.filter(valuation => {
+                    const createdDate = new Date(valuation.created_at);
+                    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+                    return createdDate >= weekAgo;
+                }).length;
+
+                const monthValuations = filteredData.valuations.filter(valuation => {
+                    const createdDate = new Date(valuation.created_at);
+                    const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+                    return createdDate >= monthAgo;
+                }).length;
+
+                reportData.push(['Test Drive Bookings', todayBookings, weekBookings, monthBookings, filteredData.bookings.length]);
+                reportData.push(['Car Valuations', todayValuations, weekValuations, monthValuations, filteredData.valuations.length]);
+
+                const reportWS = XLSX.utils.aoa_to_sheet(reportData);
+                XLSX.utils.book_append_sheet(wb, reportWS, 'Report');
+
+                // Logic Reference Sheet
+                const logicData = [
+                    ['Logic Reference'],
+                    [],
+                    ['Data Sources:'],
+                    ['- Cars: Real-time inventory data from database'],
+                    ['- Test Drive Bookings: Customer booking requests'],
+                    ['- Car Valuations: Customer valuation requests'],
+                    [],
+                    ['Calculation Methods:'],
+                    ['- Percentages: (Count / Total) * 100'],
+                    ['- Time Ranges: Based on creation/booking datetime'],
+                    ['- Brand Performance: Grouped by car brand'],
+                    ['- Fuel Distribution: Grouped by fuel type'],
+                    [],
+                    ['Report Generated:', new Date().toLocaleString()],
+                    ['Generated By:', 'AutoSherpa Reports System']
+                ];
+
+                const logicWS = XLSX.utils.aoa_to_sheet(logicData);
+                XLSX.utils.book_append_sheet(wb, logicWS, 'Logic Reference');
+
+                // Export file
+                const fileName = `Data Summary - ${new Date().toISOString().split('T')[0]}.xlsx`;
+                XLSX.writeFile(wb, fileName);
+
+                alert('Excel file exported successfully!');
+
+            } catch (error) {
+                console.error('Error exporting to Excel:', error);
+                alert('Error exporting to Excel. Please try again.');
+            }
+        }
+
+        function refreshData() {
+            loadAllData();
+        }
+
+        // Process message logs for time-based analysis
+        function processTimeBasedData(messageLogs) {
+            const timeRanges = {
+                '9am-12pm': { browse_cars: 0, car_valuation: 0, contact_team: 0, about_us: 0, total: 0 },
+                '12pm-3pm': { browse_cars: 0, car_valuation: 0, contact_team: 0, about_us: 0, total: 0 },
+                '3pm-6pm': { browse_cars: 0, car_valuation: 0, contact_team: 0, about_us: 0, total: 0 },
+                '6pm-9pm': { browse_cars: 0, car_valuation: 0, contact_team: 0, about_us: 0, total: 0 },
+                'total': { browse_cars: 0, car_valuation: 0, contact_team: 0, about_us: 0, total: 0 }
+            };
+
+            // Process message logs based on detected intent
+            (messageLogs || []).forEach(log => {
+                const date = new Date(log.created_at || log.timestamp || Date.now());
+                const hour = date.getHours();
+                let timeRange = '';
+
+                if (hour >= 9 && hour < 12) timeRange = '9am-12pm';
+                else if (hour >= 12 && hour < 15) timeRange = '12pm-3pm';
+                else if (hour >= 15 && hour < 18) timeRange = '3pm-6pm';
+                else if (hour >= 18 && hour < 21) timeRange = '6pm-9pm';
+                else return; // Skip messages outside business hours
+
+                const intent = (log.intent || '').toLowerCase();
+                let category = '';
+                if (intent === 'browse_cars' || intent === 'browse') category = 'browse_cars';
+                else if (intent === 'car_valuation' || intent === 'valuation') category = 'car_valuation';
+                else if (intent === 'contact_team' || intent === 'contact') category = 'contact_team';
+                else if (intent === 'about_us' || intent === 'about') category = 'about_us';
+                else return; // Unknown/no intent
+
+                if (timeRanges[timeRange]) {
+                    timeRanges[timeRange][category]++;
+                    timeRanges[timeRange].total++;
+                    timeRanges.total[category]++;
+                    timeRanges.total.total++;
+                }
+            });
+
+            // Find most selected option for each time range
+            Object.keys(timeRanges).forEach(range => {
+                if (range === 'total') return;
+                const data = timeRanges[range];
+                const max = Math.max(data.browse_cars, data.car_valuation, data.contact_team, data.about_us);
+                if (max === data.browse_cars) data.mostSelected = 'Browse used cars';
+                else if (max === data.car_valuation) data.mostSelected = 'Get car valuation';
+                else if (max === data.contact_team) data.mostSelected = 'Contact Our Team';
+                else if (max === data.about_us) data.mostSelected = 'About Us';
+            });
+
+            // Find most selected option for total
+            const totalData = timeRanges.total;
+            const maxTotal = Math.max(totalData.browse_cars, totalData.car_valuation, totalData.contact_team, totalData.about_us);
+            if (maxTotal === totalData.browse_cars) totalData.mostSelected = 'Browse used cars';
+            else if (maxTotal === totalData.car_valuation) totalData.mostSelected = 'Get car valuation';
+            else if (maxTotal === totalData.contact_team) totalData.mostSelected = 'Contact Our Team';
+            else if (maxTotal === totalData.about_us) totalData.mostSelected = 'About Us';
+
+            return timeRanges;
+        }
+
+        function logout() {
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('userData');
+            window.location.href = '/';
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            checkAuth();
+            loadAllData();
+        });
+    </script>
+</body>
+</html>

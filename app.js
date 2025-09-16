@@ -6,6 +6,11 @@ const axios = require('axios');
 // Import database connection
 const pool = require('./db');
 const { routeMessage } = require('./utils/mainRouter');
+<<<<<<< HEAD
+=======
+const { extractIntentEntities } = require('./utils/geminiHandler');
+const MessageLogger = require('./utils/messageLogger');
+>>>>>>> 3c80ab4 (Updated the Gemini LLM)
 const sessions = {}; 
 
 const app = express();
@@ -94,8 +99,42 @@ app.post('/webhook', async (req, res) => {
         return res.sendStatus(200);
       }
 
+<<<<<<< HEAD
            let response;
+=======
+      // Build short history (optional)
+      const history = [{ role: 'user', text: userMsg }];
+      // Extract intent/entities via Gemini
+      let intentData = { intent: 'general', entities: {}, confidence: 0.0 };
       try {
+        intentData = await extractIntentEntities(userMsg, history);
+      } catch (_) {}
+
+      // Log incoming message with AI fields
+      try {
+        await MessageLogger.logMessage({
+          phoneNumber: from,
+          messageType: 'incoming',
+          messageContent: userMsg,
+          responseSent: false,
+          sessionId: sessions[from].sessionId || null,
+          userAgent: req.headers['user-agent'],
+          ipAddress: req.ip || req.connection.remoteAddress,
+          intent: intentData.intent,
+          entities: intentData.entities,
+          confidence: intentData.confidence
+        });
+      } catch (logError) {
+        console.error("❌ Error logging incoming message:", logError);
+      }
+
+      let response;
+>>>>>>> 3c80ab4 (Updated the Gemini LLM)
+      try {
+        // Optionally store extracted intent in session for routing hints
+        sessions[from].lastIntent = intentData.intent;
+        sessions[from].lastEntities = intentData.entities;
+        sessions[from].lastConfidence = typeof intentData.confidence === 'number' ? intentData.confidence : 0.0;
         response = await routeMessage(sessions[from], userMsg, pool);
         console.log('Session After:', JSON.stringify(sessions[from], null, 2));
         console.log('Response:', JSON.stringify(response, null, 2));
@@ -111,6 +150,29 @@ app.post('/webhook', async (req, res) => {
         // Don't send any additional message
       } else if (response && response.message) {
         await sendWhatsAppMessage(from, response.message, response.options || [], response.messages || []);
+<<<<<<< HEAD
+=======
+        
+        // Log outgoing response
+        try {
+          await MessageLogger.logMessage({
+            phoneNumber: from,
+            messageType: 'outgoing',
+            messageContent: response.message,
+            responseSent: true,
+            responseContent: response.message,
+            sessionId: sessions[from].sessionId || null,
+            userAgent: req.headers['user-agent'],
+            ipAddress: req.ip || req.connection.remoteAddress,
+            intent: sessions[from].lastIntent || null,
+            entities: sessions[from].lastEntities || null,
+            confidence: intentData.confidence
+          });
+        } catch (logError) {
+          console.error("❌ Error logging outgoing message:", logError);
+        }
+        
+>>>>>>> 3c80ab4 (Updated the Gemini LLM)
       } else {
         console.error("❌ Invalid response from routeMessage:", response);
         await sendWhatsAppMessage(from, "I apologize, but I encountered an error. Please try again.", [], []);

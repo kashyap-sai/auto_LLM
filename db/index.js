@@ -5,6 +5,7 @@ console.log('🔍 Database connection setup:');
 console.log('🔍 DATABASE_URL exists:', !!process.env.DATABASE_URL);
 console.log('🔍 DATABASE_URL length:', process.env.DATABASE_URL ? process.env.DATABASE_URL.length : 0);
 
+<<<<<<< HEAD
 // Flexible PostgreSQL configuration to support local PG or hosted (Neon/Render/etc.)
 // Priority: DATABASE_URL → individual PG_ env vars → sane local defaults
 let poolConfig;
@@ -32,6 +33,23 @@ if (process.env.DATABASE_URL) {
 }
 
 const pool = new Pool(poolConfig);
+=======
+// Connection configuration with conditional SSL
+const connectionString = process.env.DATABASE_URL;
+const urlString = connectionString || '';
+const sslRequiredByUrl = /sslmode=require/i.test(urlString);
+const isKnownManagedHost = /neon\.tech|render\.com|amazonaws\.com/i.test(urlString);
+const envSslFlag = (process.env.DATABASE_SSL || '').toLowerCase(); // 'require' | 'disable' | ''
+
+const useSSL = envSslFlag === 'require' || (envSslFlag !== 'disable' && (sslRequiredByUrl || isKnownManagedHost));
+
+console.log('🔍 DB SSL decision:', { sslRequiredByUrl, isKnownManagedHost, envSslFlag, useSSL });
+
+const pool = new Pool({
+    connectionString,
+    ssl: useSSL ? { rejectUnauthorized: false } : false
+});
+>>>>>>> 3c80ab4 (Updated the Gemini LLM)
 
 // Test the connection
 pool.on('connect', () => {

@@ -3,6 +3,115 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 // Initialize Gemini API
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+// --- Rule-based extraction helpers ---
+const KNOWN_BRANDS = [
+  'hyundai','honda','toyota','maruti','suzuki','maruti suzuki','tata','kia','mahindra','skoda','renault','ford','chevrolet','volkswagen','vw','bmw','audi','mercedes','mercedes-benz','mg','nissan','jeep','volvo'
+];
+const KNOWN_TYPES = ['suv','sedan','hatchback','mpv','muv','coupe','convertible','pickup','truck','crossover'];
+
+function normalizeBrand(word) {
+  const w = word.toLowerCase();
+  if (w === 'vw') return 'volkswagen';
+  if (w === 'mercedes-benz' || w === 'mercedes benz') return 'mercedes';
+  if (w === 'maruti suzuki') return 'maruti';
+  return w;
+}
+
+function parseBudget(message) {
+  const m = message.toLowerCase();
+  // Match patterns like: under 10 lakh(s), below 8 l, 12-15 lakhs, 7l, 5,00,000
+  const lakhPattern = /(?:under|below|upto|up to)\s*(\d{1,2})(?:\s*l(?:akh)?s?)?/;
+  const rangePattern = /(\d{1,2})\s*[-to]{1,3}\s*(\d{1,2})\s*l(?:akh)?s?/;
+  const simpleLakh = /(\d{1,2})\s*l(?:akh)?s?/;
+  const inrPattern = /(?:₹|rs\.?\s*)([\d,]{3,7})/;
+  if (rangePattern.test(m)) {
+    const [, a, b] = m.match(rangePattern);
+    return { budget_min: Number(a), budget_max: Number(b) };
+  }
+  if (lakhPattern.test(m)) {
+    const [, b] = m.match(lakhPattern);
+    return { budget_max: Number(b) };
+  }
+  if (simpleLakh.test(m)) {
+    const [, b] = m.match(simpleLakh);
+    return { budget_max: Number(b) };
+  }
+  if (inrPattern.test(m)) {
+    const [, amt] = m.match(inrPattern);
+    const n = Number(amt.replace(/,/g, ''));
+    if (!Number.isNaN(n)) {
+      // Convert INR to lakhs approx
+      const lakhs = Math.round(n / 100000);
+      return { budget_max: lakhs };
+    }
+  }
+  return null;
+}
+
+function extractBrand(message) {
+  const lower = message.toLowerCase();
+  for (const b of KNOWN_BRANDS) {
+    if (lower.includes(b)) return normalizeBrand(b);
+  }
+  return null;
+}
+
+function extractType(message) {
+  const lower = message.toLowerCase();
+  for (const t of KNOWN_TYPES) {
+    if (lower.includes(t)) return t;
+  }
+  return null;
+}
+
+function extractYear(message) {
+  const match = message.match(/\b(19\d{2}|20\d{2})\b/);
+  return match ? Number(match[1]) : null;
+}
+
+function ruleBasedExtract(message) {
+  const lower = message.toLowerCase();
+  const entities = {};
+  const brand = extractBrand(lower);
+  if (brand) entities.brand = brand;
+  const type = extractType(lower);
+  if (type) entities.type = type;
+  const year = extractYear(lower);
+  if (year) entities.year = year;
+  const budget = parseBudget(lower);
+  if (budget) Object.assign(entities, budget);
+
+  // Intent heuristics
+  const isGreeting = /\b(hi|hello|hey|namaste|good\s*(morning|afternoon|evening))\b/.test(lower);
+  const isBrowse = /(browse|show\s+me|see|looking\s*for|search|find|buy|available).*(car|suv|sedan|hatch|inventory)|\bcars?\b/.test(lower);
+  const isValuation = /(valuation|value\s*my|sell\s*my|price\s*my|what'?s\s*my\s*car\s*worth)/.test(lower);
+  const isTestDrive = /(test\s*drive|book\s*drive|schedule\s*drive|drive\s*booking)/.test(lower);
+  const isContact = /(contact|call|phone|talk\s*to|speak\s*to|sales\s*team)/.test(lower);
+  const isAbout = /(about\s*(us|dealership)|who\s*are\s*you|info|information)/.test(lower);
+
+  if (isGreeting && !isBrowse && !isValuation && !isTestDrive && !isContact && !isAbout) {
+    return { intent: 'greeting', entities, confidence: 0.9, source: 'rule-based' };
+  }
+  if (isValuation) {
+    return { intent: 'car_valuation', entities, confidence: 0.92, source: 'rule-based' };
+  }
+  if (isTestDrive) {
+    return { intent: 'test_drive', entities, confidence: 0.9, source: 'rule-based' };
+  }
+  if (isContact) {
+    return { intent: 'contact_team', entities, confidence: 0.9, source: 'rule-based' };
+  }
+  if (isAbout) {
+    return { intent: 'about_us', entities, confidence: 0.9, source: 'rule-based' };
+  }
+  if (isBrowse || brand || type || budget) {
+    return { intent: 'browse_cars', entities, confidence: 0.9, source: 'rule-based' };
+  }
+
+  // No confident rule hit
+  return null;
+}
+
 // Context for the AI to understand the car dealership bot's purpose
 const SYSTEM_CONTEXT = `You are a helpful car dealership assistant for Sherpa Hyundai. Your role is to:
 1. Help customers with car-related queries (browsing used cars, valuations, contact info, about us)
@@ -118,7 +227,13 @@ function getFallbackResponse(userMessage) {
   ];
   
   const isOffTopic = offTopicKeywords.some(keyword => lowerMsg.includes(keyword));
-  const iscarTopic = iscarKeywords.some(keyword => lowerMsg.includes(keyword));
+  const carKeywords = [
+    'car','vehicle','auto','drive','buy','sell','price','valuation','browse','inventory','model','brand','year','fuel',
+    'diesel','petrol','hybrid','electric','km','mileage','condition','owner','contact','team','sales',
+    'honda','hyundai','toyota','maruti','tata','kia','mahindra','skoda','renault','ford','chevrolet','volkswagen','bmw','audi','mercedes',
+    '₹','lakhs','lakh','budget','under','above','range'
+  ];
+  const iscarTopic = carKeywords.some(keyword => lowerMsg.includes(keyword));
   
   if (iscarTopic) {
     return `I'm here to help you with car-related services at Sherpa Hyundai! 🚗
@@ -220,3 +335,37 @@ module.exports = {
   isOutOfContext,
   getFallbackResponse
 };
+
+// New: extract intent and entities from a user message using Gemini
+async function extractIntentEntities(message, history = []) {
+  try {
+    // 1) Try rule-based first
+    const ruleHit = ruleBasedExtract(message);
+    if (ruleHit) return ruleHit;
+
+    // 2) Fallback to Gemini if available
+    if (!process.env.GEMINI_API_KEY || !process.env.GEMINI_API_KEY.startsWith('AIza')) {
+      return { intent: 'general', entities: {}, confidence: 0.0, source: 'fallback' };
+    }
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', generationConfig: { temperature: 0.2, maxOutputTokens: 256 } });
+    const sys = `You are an intent and entity extractor for a car dealership WhatsApp bot.\nReturn STRICT JSON only (no prose). Schema:\n{\n  "intent": one of ["browse_cars","car_valuation","test_drive","contact_team","about_us","greeting","general"],\n  "entities": {\n     "brand"?: string, "model"?: string, "year"?: number, "fuel_type"?: string,\n     "budget_min"?: number, "budget_max"?: number, "phone"?: string,\n     "test_drive_date"?: string, "test_drive_time"?: string, "location"?: string\n  },\n  "confidence": number (0..1)\n}\nPrefer intent based on the user's goal.`;
+    const convo = history.map(h => `${h.role.toUpperCase()}: ${h.text}`).join('\n');
+    const prompt = `${sys}\n\nConversation:\n${convo}\nUSER: ${message}\n\nJSON:`;
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    const jsonStart = text.indexOf('{');
+    const jsonEnd = text.lastIndexOf('}');
+    if (jsonStart === -1 || jsonEnd === -1) return { intent: 'general', entities: {}, confidence: 0.0, source: 'gemini' };
+    const parsed = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+    // Basic validation
+    if (!parsed.intent) parsed.intent = 'general';
+    if (typeof parsed.entities !== 'object') parsed.entities = {};
+    if (typeof parsed.confidence !== 'number') parsed.confidence = 0.5;
+    return { ...parsed, source: 'gemini' };
+  } catch (e) {
+    console.error('❌ Gemini extractIntentEntities error:', e.message);
+    return { intent: 'general', entities: {}, confidence: 0.0, source: 'fallback' };
+  }
+}
+
+module.exports.extractIntentEntities = extractIntentEntities;

@@ -81,6 +81,45 @@ CREATE TABLE IF NOT EXISTS test_drives (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+<<<<<<< HEAD
+=======
+-- Create car_valuations table for car valuation requests
+CREATE TABLE IF NOT EXISTS car_valuations (
+    id SERIAL PRIMARY KEY,
+    user_id VARCHAR(100),
+    name VARCHAR(100),
+    phone VARCHAR(20),
+    brand VARCHAR(50),
+    model VARCHAR(50),
+    year INTEGER,
+    fuel_type VARCHAR(20),
+    mileage INTEGER,
+    owner VARCHAR(20),
+    condition VARCHAR(20),
+    location VARCHAR(100),
+    estimated_value DECIMAL(12,2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create message_logs table for tracking WhatsApp messages
+CREATE TABLE IF NOT EXISTS message_logs (
+    id SERIAL PRIMARY KEY,
+    phone_number VARCHAR(20) NOT NULL,
+    message_type VARCHAR(50) NOT NULL, -- 'browse_cars', 'car_valuation', 'contact_team', 'about_us', 'test_drive', 'general', or 'incoming/outgoing'
+    message_content TEXT,
+    response_sent BOOLEAN DEFAULT false,
+    response_content TEXT,
+    session_id VARCHAR(100),
+    user_agent TEXT,
+    ip_address INET,
+    -- New optional fields for AI-driven routing
+    intent VARCHAR(50),
+    entities JSONB,
+    confidence NUMERIC(3,2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+>>>>>>> 3c80ab4 (Updated the Gemini LLM)
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_cars_registration_number ON cars(registration_number);
 CREATE INDEX IF NOT EXISTS idx_cars_dealer_id ON cars(dealer_id);
@@ -89,6 +128,15 @@ CREATE INDEX IF NOT EXISTS idx_bot_confirmations_car_id ON bot_confirmations(car
 CREATE INDEX IF NOT EXISTS idx_callback_requests_phone ON callback_requests(phone);
 CREATE INDEX IF NOT EXISTS idx_callback_requests_status ON callback_requests(status);
 CREATE INDEX IF NOT EXISTS idx_test_drives_created_at ON test_drives(created_at);
+<<<<<<< HEAD
+=======
+CREATE INDEX IF NOT EXISTS idx_car_valuations_created_at ON car_valuations(created_at);
+CREATE INDEX IF NOT EXISTS idx_car_valuations_phone ON car_valuations(phone);
+CREATE INDEX IF NOT EXISTS idx_message_logs_phone ON message_logs(phone_number);
+CREATE INDEX IF NOT EXISTS idx_message_logs_type ON message_logs(message_type);
+CREATE INDEX IF NOT EXISTS idx_message_logs_created_at ON message_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_message_logs_intent ON message_logs(intent);
+>>>>>>> 3c80ab4 (Updated the Gemini LLM)
 
 -- Create function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
