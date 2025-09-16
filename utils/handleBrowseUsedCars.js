@@ -203,7 +203,7 @@ async function handleBrowseUsedCars(session, userMessage) {
         message: "Great choice! Let's find your perfect car. First, what's your budget range?",
         options: BUDGET_OPTIONS
       };
->>>>>>> 3c80ab4 (Updated the Gemini LLM)
+
 
     case 'browse_budget':
       console.log("🔄 Step matched: browse_budget");
