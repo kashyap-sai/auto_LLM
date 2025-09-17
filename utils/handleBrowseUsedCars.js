@@ -1,9 +1,6 @@
-<<<<<<< HEAD
-const { formatRupees, getAvailableTypes, getAvailableBrands, getCarsByFilter , getCarImagesByRegistration} = require('./carData');
-const { extractBrowseSlots } = require('./intentExtractor');
-=======
+
 const { formatRupees, getAvailableTypes, getAvailableTypesByBrand, getAvailableBrands, getCarsByFilter , getCarImagesByRegistration} = require('./carData');
->>>>>>> 3c80ab4 (Updated the Gemini LLM)
+const { extractBrowseSlots } = require('./intentExtractor');
 const { getNextAvailableDays, getTimeSlots, getActualDateFromSelection, getActualDateFromDaySelection } = require('./timeUtils');
 const { validateBudget, validateCarType, validateBrand, createValidationErrorMessage } = require('./inputValidation');
 const fs = require('fs');
@@ -104,7 +101,6 @@ async function handleBrowseUsedCars(session, userMessage) {
       console.log("🔄 Step matched: browse_start");
       console.log("📝 User message in browse_start:", userMessage);
       
-<<<<<<< HEAD
       // If brand/type/budget pre-filled, skip steps accordingly
       if (!session.budget) {
         session.step = 'browse_budget';
@@ -138,7 +134,7 @@ async function handleBrowseUsedCars(session, userMessage) {
         return { message: `We don't have cars matching your criteria right now.`, options: ["Change criteria"] };
       }
       return await getCarDisplayChunk(session, pool);
-=======
+
       // If budget is already known, skip budget question
       if (session.budget) {
         let normalizedBudget = null;

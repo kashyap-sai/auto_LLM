@@ -81,8 +81,7 @@ CREATE TABLE IF NOT EXISTS test_drives (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-<<<<<<< HEAD
-=======
+
 -- Create car_valuations table for car valuation requests
 CREATE TABLE IF NOT EXISTS car_valuations (
     id SERIAL PRIMARY KEY,
@@ -128,15 +127,14 @@ CREATE INDEX IF NOT EXISTS idx_bot_confirmations_car_id ON bot_confirmations(car
 CREATE INDEX IF NOT EXISTS idx_callback_requests_phone ON callback_requests(phone);
 CREATE INDEX IF NOT EXISTS idx_callback_requests_status ON callback_requests(status);
 CREATE INDEX IF NOT EXISTS idx_test_drives_created_at ON test_drives(created_at);
-<<<<<<< HEAD
-=======
+
 CREATE INDEX IF NOT EXISTS idx_car_valuations_created_at ON car_valuations(created_at);
 CREATE INDEX IF NOT EXISTS idx_car_valuations_phone ON car_valuations(phone);
 CREATE INDEX IF NOT EXISTS idx_message_logs_phone ON message_logs(phone_number);
 CREATE INDEX IF NOT EXISTS idx_message_logs_type ON message_logs(message_type);
 CREATE INDEX IF NOT EXISTS idx_message_logs_created_at ON message_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_message_logs_intent ON message_logs(intent);
->>>>>>> 3c80ab4 (Updated the Gemini LLM)
+
 
 -- Create function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()

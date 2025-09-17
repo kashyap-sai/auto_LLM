@@ -6,11 +6,8 @@ const axios = require('axios');
 // Import database connection
 const pool = require('./db');
 const { routeMessage } = require('./utils/mainRouter');
-<<<<<<< HEAD
-=======
 const { extractIntentEntities } = require('./utils/geminiHandler');
 const MessageLogger = require('./utils/messageLogger');
->>>>>>> 3c80ab4 (Updated the Gemini LLM)
 const sessions = {}; 
 
 const app = express();
@@ -99,9 +96,6 @@ app.post('/webhook', async (req, res) => {
         return res.sendStatus(200);
       }
 
-<<<<<<< HEAD
-           let response;
-=======
       // Build short history (optional)
       const history = [{ role: 'user', text: userMsg }];
       // Extract intent/entities via Gemini
@@ -129,7 +123,6 @@ app.post('/webhook', async (req, res) => {
       }
 
       let response;
->>>>>>> 3c80ab4 (Updated the Gemini LLM)
       try {
         // Optionally store extracted intent in session for routing hints
         sessions[from].lastIntent = intentData.intent;
@@ -150,9 +143,7 @@ app.post('/webhook', async (req, res) => {
         // Don't send any additional message
       } else if (response && response.message) {
         await sendWhatsAppMessage(from, response.message, response.options || [], response.messages || []);
-<<<<<<< HEAD
-=======
-        
+
         // Log outgoing response
         try {
           await MessageLogger.logMessage({
@@ -171,8 +162,6 @@ app.post('/webhook', async (req, res) => {
         } catch (logError) {
           console.error("❌ Error logging outgoing message:", logError);
         }
-        
->>>>>>> 3c80ab4 (Updated the Gemini LLM)
       } else {
         console.error("❌ Invalid response from routeMessage:", response);
         await sendWhatsAppMessage(from, "I apologize, but I encountered an error. Please try again.", [], []);

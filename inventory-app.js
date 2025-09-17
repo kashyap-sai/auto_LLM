@@ -14,6 +14,23 @@ console.log('📁 Using local file storage');
 // Absolute uploads root to avoid cwd issues in production
 const UPLOADS_ROOT = path.join(__dirname, 'uploads');
 
+// Map to support alternative car_images schemas (image_path/image_type vs file_path/image_index)
+async function getCarImagesColumnMap(dbPool) {
+    try {
+        const res = await dbPool.query(`
+            SELECT column_name FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'car_images'
+        `);
+        const cols = res.rows.map(r => r.column_name);
+        const pathCol = cols.includes('image_path') ? 'image_path' : (cols.includes('file_path') ? 'file_path' : 'image_path');
+        const typeCol = cols.includes('image_type') ? 'image_type' : (cols.includes('image_index') ? 'image_index' : 'image_type');
+        return { pathCol, typeCol };
+    } catch (e) {
+        console.warn('⚠️ Unable to introspect car_images schema, defaulting to image_path/image_type:', e.message);
+        return { pathCol: 'image_path', typeCol: 'image_type' };
+    }
+}
+
 // Helper function to get image URL (local storage)
 function getImageUrl(imagePath) {
     if (!imagePath) return null;  
@@ -964,10 +981,10 @@ app.post('/api/upload-car-images', authenticateToken, imageUpload.array('images'
             
             try {
                 // Save image record to database with the local path
-                const imageResult = await pool.query(
-                    'INSERT INTO car_images (car_id, image_path, image_type) VALUES ($1, $2, $3) RETURNING id',
-                    [carId, imagePath, imageType]
-                );
+                const { pathCol, typeCol } = await getCarImagesColumnMap(pool);
+                const insertSql = `INSERT INTO car_images (car_id, ${pathCol}, ${typeCol}) VALUES ($1, $2, $3) RETURNING id`;
+                const typeValue = typeCol === 'image_index' ? (parseInt(imageIndex) + 1) : imageType;
+                const imageResult = await pool.query(insertSql, [carId, imagePath, typeValue]);
                 
                 uploadedImages.push({
                     id: imageResult.rows[0].id,
@@ -1036,10 +1053,9 @@ app.get('/api/cars', authenticateToken, async (req, res) => {
         const carsWithImages = [];
         
         for (const car of carsResult.rows) {
-            const imagesResult = await pool.query(
-                `SELECT image_path, image_type FROM car_images WHERE car_id = $1 ORDER BY id`,
-                [car.id]
-            );
+            const { pathCol, typeCol } = await getCarImagesColumnMap(pool);
+            const selectSql = `SELECT ${pathCol} AS image_path, ${typeCol} AS image_type FROM car_images WHERE car_id = $1 ORDER BY id`;
+            const imagesResult = await pool.query(selectSql, [car.id]);
             
             // Ensure image_paths is always an array, even if empty
             const imagePaths = imagesResult.rows.map(row => getImageUrl(row.image_path)).filter(Boolean);
