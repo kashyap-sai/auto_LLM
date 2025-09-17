@@ -53,6 +53,32 @@ if (session.conversationEnded && (lowerMsg.includes('start') || lowerMsg.include
   const entities = session.lastEntities || {};
   const confidence = typeof session.lastConfidence === 'number' ? session.lastConfidence : 0;
 
+  // Priority: if we are already in a concrete flow step, continue that flow and ignore new intents
+  if (session.step) {
+    const valuationStepSet = new Set(['valuation_start','brand','model','year','fuel','kms','owner','condition','name','phone','location','other_brand_input','other_model_input']);
+    const contactStepSet = new Set(['contact_start','contact_menu','callback_time','callback_name','contact_callback_phone','callback_reason']);
+    if (session.step.startsWith('browse') || session.step === 'show_more_cars' || session.step === 'show_more_cars_after_images' || session.step === 'car_selected_options') {
+      console.log("➡️ [Priority] Continue: Browse Used Cars (step: " + session.step + ")");
+      return handleBrowseUsedCars(session, message, pool);
+    }
+    if (session.step.startsWith('test_drive') || session.step.startsWith('td_')) {
+      console.log("➡️ [Priority] Continue: Test Drive flow");
+      return handleBrowseUsedCars(session, message, pool);
+    }
+    if (session.step.startsWith('valuation') || valuationStepSet.has(session.step)) {
+      console.log("➡️ [Priority] Continue: Car Valuation");
+      return handleCarValuationStep(session, message);
+    }
+    if (session.step.startsWith('contact') || contactStepSet.has(session.step)) {
+      console.log("➡️ [Priority] Continue: Contact Us");
+      return handleContactUsStep(session, message);
+    }
+    if (session.step.startsWith('about')) {
+      console.log("➡️ [Priority] Continue: About Us");
+      return handleAboutUsStep(session, message);
+    }
+  }
+
   // Helper: seed session from extracted entities for each flow
   const seedFromEntities = () => {
     // Browse cars
@@ -81,15 +107,17 @@ if (session.conversationEnded && (lowerMsg.includes('start') || lowerMsg.include
   };
 
   if (intent) {
+    const valuationStepSet = new Set(['valuation_start','brand','model','year','fuel','kms','owner','condition','name','phone','location','other_brand_input','other_model_input']);
+    const contactStepSet = new Set(['contact_start','contact_menu','callback_time','callback_name','contact_callback_phone','callback_reason']);
+    const testDriveStepPrefix = (s) => s && (s.startsWith('test_drive') || s.startsWith('td_'));
     const inActiveFlow = !!session.step && (
       session.step.startsWith('browse') ||
       session.step === 'show_more_cars' ||
       session.step === 'show_more_cars_after_images' ||
       session.step === 'car_selected_options' ||
-      session.step.startsWith('test_drive') ||
-      session.step.startsWith('td_') ||
-      session.step.startsWith('valuation') ||
-      session.step.startsWith('contact') ||
+      testDriveStepPrefix(session.step) ||
+      session.step.startsWith('valuation') || valuationStepSet.has(session.step) ||
+      session.step.startsWith('contact') || contactStepSet.has(session.step) ||
       session.step.startsWith('about')
     );
 
@@ -98,7 +126,7 @@ if (session.conversationEnded && (lowerMsg.includes('start') || lowerMsg.include
       session.step = 'intent_clarify';
       return {
         message: 'Just to confirm—what would you like to do?',
-        options: ['🚗 Browse Used Cars', '💰 Get Car Valuation', '📞 Contact Our Team', 'Book a Test Drive']
+        options: ['🚗 Browse Used Cars', '💰 Get Car Valuation', '📞 Contact Our Team', 'About Us']
       };
     }
 
@@ -258,6 +286,22 @@ if (session.conversationEnded && (lowerMsg.includes('start') || lowerMsg.include
     } catch (_) {}
     console.log("💬 Intent matched: browse → Routing to Browse Cars with prefilled slots (if any)");
     return handleBrowseUsedCars(session, message, pool);
+  }
+
+  // Users asking about available types (e.g., "what types do you have/suggest?")
+  if (/\btypes?\b|body\s*style|segment/i.test(lowerMsg)) {
+    // Jump straight to type selection prompt, using known budget/brand if present
+    session.step = 'browse_type';
+    console.log("💬 Keyword matched: types → Routing to type options");
+    // Pass an empty string to trigger the type prompt with options
+    return handleBrowseUsedCars(session, '', pool);
+  }
+
+  // Users asking about available brands (e.g., "what brands do you have/suggest?")
+  if (/\bbrands?\b|which\s+brand|what\s+brand/i.test(lowerMsg)) {
+    session.step = 'browse_brand';
+    console.log("💬 Keyword matched: brands → Routing to brand options");
+    return handleBrowseUsedCars(session, '', pool);
   }
 
   // Greet and start main menu if first message

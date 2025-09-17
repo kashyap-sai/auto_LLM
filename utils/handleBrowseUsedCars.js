@@ -509,12 +509,31 @@ async function handleBrowseUsedCars(session, userMessage) {
         };
       }
       
-      // If it's a car selection (legacy support)
-      session.selectedCar = userMessage;
-      session.step = 'test_drive_date';
+      // If it's a car selection (legacy support) - handle numeric or title-only 'SELECT'
+      const num = parseInt(userMessage, 10);
+      if (!isNaN(num) && session.lastVisibleCars && session.lastVisibleCars[num - 1]) {
+        const sel = session.lastVisibleCars[num - 1];
+        session.selectedCar = `${sel.brand} ${sel.model} ${sel.variant}`;
+        session.step = 'test_drive_date';
+        return {
+          message: `Excellent! Let's schedule your ${session.selectedCar} test drive. When would you prefer?`,
+          options: ["Today", "Tomorrow", "Later this Week", "Next Week"]
+        };
+      }
+      // Fallback: if platform returns just "SELECT", pick the first visible car
+      if (userMessage === 'SELECT' && session.lastVisibleCars && session.lastVisibleCars.length > 0) {
+        const sel = session.lastVisibleCars[0];
+        session.selectedCar = `${sel.brand} ${sel.model} ${sel.variant}`;
+        session.step = 'test_drive_date';
+        return {
+          message: `Excellent! Let's schedule your ${session.selectedCar} test drive. When would you prefer?`,
+          options: ["Today", "Tomorrow", "Later this Week", "Next Week"]
+        };
+      }
+      // As a last resort, keep asking explicitly
       return {
-        message: `Excellent! Let's schedule your ${userMessage} test drive. When would you prefer?`,
-        options: ["Today", "Tomorrow", "Later this Week", "Next Week"]
+        message: "Please tap the SELECT button below a car or reply with 1, 2, or 3 to choose from the visible cars.",
+        options: ["Browse More Cars", "Change criteria"]
       };
 
     case 'car_selected_options':
@@ -919,6 +938,14 @@ async function getCarDisplayChunk(session, pool) {
   console.log(`📸 Created ${messages.length} messages for cars`);
   console.log(`📸 Message types:`, messages.map(m => m.type));
   
+  // Store currently visible cars for selection fallback (numeric selection)
+  session.lastVisibleCars = carsToShow.map((c, idx) => ({
+    index: startIndex + idx,
+    brand: c.brand,
+    model: c.model,
+    variant: c.variant
+  }));
+
   const final = {
     message: messageText,
     messages: messages
