@@ -117,8 +117,15 @@ CREATE TABLE IF NOT EXISTS message_logs (
     confidence NUMERIC(3,2),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS public.car_brands_models (
+  id SERIAL PRIMARY KEY,
+  brand TEXT NOT NULL,
+  model TEXT NOT NULL
+);
 
->>>>>>> 3c80ab4 (Updated the Gemini LLM)
+-- Prevent duplicates
+CREATE UNIQUE INDEX IF NOT EXISTS idx_car_brands_models_brand_model
+  ON public.car_brands_models (brand, model);
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_cars_registration_number ON cars(registration_number);
 CREATE INDEX IF NOT EXISTS idx_cars_dealer_id ON cars(dealer_id);

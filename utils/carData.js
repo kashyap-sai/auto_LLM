@@ -49,24 +49,40 @@ async function getAllBrands(pool) {
 
 async function getModelsByBrand(pool, brand) {
   try {
-    // Get models from your actual cars inventory
+    // Try models from live cars inventory first
     const res = await retryQuery(pool, async () => {
-      return await pool.query('SELECT DISTINCT model FROM cars WHERE brand = $1 AND model IS NOT NULL ORDER BY model', [brand]);
+      return await pool.query(
+        'SELECT DISTINCT model FROM cars WHERE brand = $1 AND model IS NOT NULL ORDER BY model',
+        [brand]
+      );
     });
-    
+
     if (res.rows.length > 0) {
       const models = res.rows.map(row => row.model);
-      console.log(`📈 Found ${models.length} models for brand ${brand}:`, models);
-      // Limit to 10 models for WhatsApp list compatibility
+      console.log(`📈 Found ${models.length} models for brand ${brand} in cars:`, models);
       return models.slice(0, 10);
     }
-    
-    console.log(`📭 No models found for brand ${brand}, returning defaults`);
-    return ['City', 'Swift', 'i20', 'Nexon', 'XUV'];
+
+    // Fallback: look up curated brand-model table
+    const res2 = await retryQuery(pool, async () => {
+      return await pool.query(
+        'SELECT model FROM public.car_brands_models WHERE LOWER(brand) = LOWER($1) ORDER BY model',
+        [brand]
+      );
+    });
+
+    if (res2.rows.length > 0) {
+      const models = res2.rows.map(row => row.model);
+      console.log(`📈 Found ${models.length} models for brand ${brand} in car_brands_models:`, models);
+      return models.slice(0, 10);
+    }
+
+    console.log(`📭 No models found for brand ${brand} in any table`);
+    // Return empty to let caller inform user it's not present
+    return [];
   } catch (error) {
-    console.error('Error fetching models from cars table:', error);
-    // Return default models if database query fails
-    return ['City', 'Swift', 'i20', 'Nexon', 'XUV'];
+    console.error('Error fetching models by brand:', error);
+    return [];
   }
 }
 

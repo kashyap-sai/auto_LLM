@@ -144,6 +144,12 @@ async function handleCarValuationStep(session, userMessage) {
         session.brand = userMessage;
         session.step = 'model';
         const models = await getModelsByBrand(pool, userMessage);
+        if (!models || models.length === 0) {
+          return {
+            message: `Sorry, we don't have models for ${userMessage} in our database right now. You can type your model name or choose 'Other ${userMessage} models'.`,
+            options: [`Other ${userMessage} models`]
+          };
+        }
         return {
           message: `Perfect! Which ${userMessage} model do you have?`,
           options: [...models, `Other ${userMessage} models`]
@@ -160,6 +166,23 @@ async function handleCarValuationStep(session, userMessage) {
         session.step = 'other_model_input';
         return { message: `Perfect! Please write down which model car you have.` };
       } else {
+        // Validate model against DB for selected brand
+        if (session.brand) {
+          const models = await getModelsByBrand(pool, session.brand);
+          if (!models || models.length === 0) {
+            return {
+              message: `Sorry, we don't have models for ${session.brand} in our database right now. You can type your model name or choose 'Other ${session.brand} models'.`,
+              options: [`Other ${session.brand} models`]
+            };
+          }
+          const match = models.find(m => String(m).toLowerCase() === String(userMessage).toLowerCase());
+          if (!match) {
+            return {
+              message: `Sorry, '${userMessage}' isn't available for ${session.brand} right now. Please choose a model from the list or select 'Other ${session.brand} models'.`,
+              options: [...models, `Other ${session.brand} models`]
+            };
+          }
+        }
         session.model = userMessage;
         session.step = 'year';
         return {
