@@ -6,7 +6,7 @@ const axios = require('axios');
 // Import database connection
 const pool = require('./db');
 const { routeMessage } = require('./utils/mainRouter');
-const { extractIntentEntities } = require('./utils/geminiHandler');
+const { extractIntentEntities } = require('./utils/extractIntentEntities');
 const MessageLogger = require('./utils/messageLogger');
 const sessions = {}; 
 
