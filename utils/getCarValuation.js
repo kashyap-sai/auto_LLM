@@ -11,6 +11,53 @@ const SLOT_OPTIONS = {
   year: Array.from({length: 31}, (_, i) => (new Date().getFullYear() - i).toString())
 };
 
+// Validation functions
+function validateYear(year) {
+  const currentYear = new Date().getFullYear();
+  const yearNum = parseInt(year);
+  if (yearNum >= 1990 && yearNum <= currentYear) {
+    return { isValid: true, matchedOption: yearNum.toString() };
+  }
+  return { isValid: false, suggestions: [`Please enter a year between 1990 and ${currentYear}`] };
+}
+
+function validateFuelType(fuel) {
+  const validFuels = ["Petrol", "Diesel", "CNG", "Electric"];
+  const matched = validFuels.find(f => f.toLowerCase() === fuel.toLowerCase());
+  if (matched) {
+    return { isValid: true, matchedOption: matched };
+  }
+  return { isValid: false, suggestions: validFuels };
+}
+
+function validateCondition(condition) {
+  const validConditions = ["Excellent", "Good", "Average", "Poor"];
+  const matched = validConditions.find(c => c.toLowerCase() === condition.toLowerCase());
+  if (matched) {
+    return { isValid: true, matchedOption: matched };
+  }
+  return { isValid: false, suggestions: validConditions };
+}
+
+function validateName(name) {
+  if (name && name.length >= 2 && name.length <= 50) {
+    return { isValid: true, matchedOption: name };
+  }
+  return { isValid: false, suggestions: ["Please enter a valid name (2-50 characters)"] };
+}
+
+function validatePhoneNumber(phone) {
+  const phoneRegex = /^[6-9]\d{9}$/;
+  if (phoneRegex.test(phone)) {
+    return { isValid: true, matchedOption: phone };
+  }
+  return { isValid: false, suggestions: ["Please enter a valid 10-digit Indian mobile number"] };
+}
+
+function createValidationErrorMessage(slot, suggestions, options) {
+  return `Please provide a valid ${slot}. ${suggestions.join(', ')}`;
+}
+
 // -----------------------------
 // LLM-driven handler
 // -----------------------------

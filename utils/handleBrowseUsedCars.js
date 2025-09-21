@@ -1,10 +1,11 @@
+
 const { formatRupees, getAvailableTypes, getAvailableBrands, getCarsByFilter } = require('./carData');
 const { extractFilters } = require('./extractFilters');
 const { getNextAvailableDays, getTimeSlots, getActualDateFromSelection } = require('./timeUtils');
 const pool = require('../db');
 
 // ------------------ Helper: Display 3 cars ------------------
-async function getCarDisplayChunk(session, pool) {
+async function getCarDisplayChunk(session) {
   const cars = session.filteredCars || [];
   const startIndex = session.carIndex || 0;
   const endIndex = Math.min(startIndex + 3, cars.length);
@@ -25,19 +26,13 @@ async function getCarDisplayChunk(session, pool) {
 // ------------------ Helper: Test Drive Confirmation ------------------
 async function getTestDriveConfirmation(session) {
   let locationText = '📍 Test Drive Location: To be confirmed';
-
   if (session.td_location_mode) {
     const mode = session.td_location_mode.toLowerCase();
-    if (mode.includes('home')) {
-      locationText = `📍 Test Drive Location: ${session.td_home_address || 'To be confirmed'}`;
-    } else if (mode.includes('showroom')) {
-      locationText = "📍 Showroom Address: Sherpa Hyundai Showroom, 123 MG Road, Bangalore\n🅿️ Free parking available";
-    }
+    if (mode.includes('home')) locationText = `📍 Test Drive Location: ${session.td_home_address || 'To be confirmed'}`;
+    else if (mode.includes('showroom')) locationText = "📍 Showroom Address: Sherpa Hyundai Showroom, 123 MG Road, Bangalore\n🅿️ Free parking available";
   }
 
-  let dateDisplay = 'To be confirmed';
-  if (session.testDriveDate) dateDisplay = session.testDriveDate;
-  if (session.testDriveDateFormatted) dateDisplay = session.testDriveDateFormatted;
+  let dateDisplay = session.testDriveDateFormatted || session.testDriveDate || 'To be confirmed';
 
   return {
     message: `Perfect! Here's your test drive confirmation:
@@ -60,58 +55,66 @@ Please confirm your booking:`,
   };
 }
 
-// ------------------ Test Drive Flow ------------------
-async function handleTestDriveFlow(session, userMessage, model, pool) {
+// ------------------ LLM-Driven Test Drive Flow ------------------
+async function handleTestDriveFlow(session, userMessage, model) {
   const step = session.step;
 
-  switch (step) {
-    case 'test_drive_start':
-      session.step = 'test_drive_date';
-      return { message: `Let's schedule your ${session.selectedCar} test drive. When would you like to go?`, options: ["Today", "Tomorrow", "Later this Week", "Next Week"] };
+  const llmResponse = await model.generate({
+    prompt: `
+You are AutoSherpa, helping users schedule a test drive.
 
-    case 'test_drive_date':
-      session.testDriveDate = userMessage;
-      session.step = 'test_drive_time';
-      return { message: "Great! Which time works best for your test drive?", options: getTimeSlots() };
+CURRENT CONTEXT:
+- User Message: "${userMessage}"
+- Current Step: ${step}
+- Selected Car: ${session.selectedCar || 'Not selected'}
+- Test Drive Date: ${session.testDriveDate || 'Not selected'}
+- Test Drive Time: ${session.testDriveTime || 'Not selected'}
+- Name: ${session.td_name || 'Not provided'}
+- Phone: ${session.td_phone || 'Not provided'}
+- License: ${session.td_license || 'Not provided'}
+- Location Mode: ${session.td_location_mode || 'Not selected'}
+- Home Address: ${session.td_home_address || 'Not provided'}
 
-    case 'test_drive_time':
-      session.testDriveTime = userMessage;
-      session.step = 'td_name';
-      return { message: "Perfect! Can I get your name to confirm the booking?" };
+TEST DRIVE FLOW STEPS:
+1. test_drive_start → Ask for date
+2. test_drive_date → Ask for time
+3. test_drive_time → Ask for name
+4. td_name → Ask for phone (10 digits only)
+5. td_phone → Ask for license (Yes/No)
+6. td_license → Ask for location (Showroom/Home)
+7. td_location_mode → Ask for address if home, or show confirmation
+8. td_home_address → Show confirmation
+9. test_drive_confirmation → Confirm booking
+10. booking_complete → Explore more or end
 
-    case 'td_name':
-      session.td_name = userMessage;
-      session.step = 'td_phone';
-      return { message: "Thanks! What's your phone number?" };
+CONVERSATION HANDLING:
+1. Handle ANY user input gracefully (off-topic, frustration, questions, etc.)
+2. Extract relevant information if present
+3. Be conversational and understanding
+4. Guide user through the test drive process
+5. Always provide appropriate button options
 
-    case 'td_phone':
-      session.td_phone = userMessage;
-      session.step = 'td_license';
-      return { message: "Do you have a valid driving license?", options: ["Yes", "No"] };
+RESPONSE FORMAT:
+{
+  "message": "friendly conversational response",
+  "options": ["button1", "button2"],
+  "next_step": "step_name",
+  "extracted_info": {"field": "value"}
+}
+`,
+    max_tokens: 150
+  });
 
-    case 'td_license':
-      session.td_license = userMessage;
-      session.step = 'td_location_mode';
-      return { message: "Where would you like to take the test drive?", options: ["Showroom pickup", "Home pickup"] };
+  try {
+    const responseData = JSON.parse(llmResponse.text);
 
-    case 'td_location_mode':
-      session.td_location_mode = userMessage;
-      if (userMessage.toLowerCase().includes('home')) {
-        session.step = 'td_home_address';
-        return { message: "Please share your current address for the test drive:" };
-      } else {
-        session.step = 'test_drive_confirmation';
-        return await getTestDriveConfirmation(session);
-      }
+    // Update session info
+    if (responseData.extracted_info) Object.assign(session, responseData.extracted_info);
+    if (responseData.next_step) session.step = responseData.next_step;
 
-    case 'td_home_address':
-      session.td_home_address = userMessage;
-      session.step = 'test_drive_confirmation';
-      return await getTestDriveConfirmation(session);
-
-    case 'test_drive_confirmation':
+    // Handle database booking
+    if (responseData.next_step === 'test_drive_confirmation' || step === 'test_drive_confirmation') {
       if (userMessage.toLowerCase().includes('confirm')) {
-        // Save booking
         try {
           let testDriveDateTime = getActualDateFromSelection(session.testDriveDate);
           if (session.testDriveTime) {
@@ -134,34 +137,29 @@ async function handleTestDriveFlow(session, userMessage, model, pool) {
             session.td_home_address || null
           ]);
 
+          session.step = 'booking_complete';
+          return { message: "Your test drive has been confirmed! Would you like to explore more cars?", options: ["Explore More", "End Conversation"] };
+
         } catch (e) {
           console.error("❌ Error saving test drive:", e);
-          return { message: "Something went wrong saving your booking. Please try again.", options: ["Retry"] };
+          const errorResponse = await model.generate({
+            prompt: `You are AutoSherpa. There was an error saving the test drive booking. Generate a friendly response. Respond in JSON: {"message": "friendly text", "options": ["Retry"]}`,
+            max_tokens: 50
+          });
+          const errorData = JSON.parse(errorResponse.text);
+          return { message: errorData.message, options: errorData.options };
         }
-
-        session.step = 'booking_complete';
-        return { message: "Your test drive has been confirmed! Would you like to explore more cars?", options: ["Explore More", "End Conversation"] };
       }
+    }
 
-      // Fallback LLM if user types free text
-      const llmResponse = await model.generate({
-        prompt: `
-          SYSTEM: You are AutoSherpa, helping users schedule a test drive.
-          Session: ${JSON.stringify(session)}
-          User message: "${userMessage}"
-          Reply conversationally, guide the user to confirm the test drive.
-          Show buttons: ["Confirm", "Reject"]
-        `,
-        max_tokens: 80
-      });
-      return { message: llmResponse.text, options: ["Confirm", "Reject"] };
-
-    case 'booking_complete':
+    // Booking completion handling
+    if (step === 'booking_complete') {
       if (userMessage === "Explore More") {
         session.step = 'browse_start';
         session.carIndex = 0;
         session.filteredCars = [];
         session.selectedCar = null;
+        session.requirements = { budget: null, type: null, brand: null };
         return { message: "Let's find your next car! What's your budget?", options: ["Under ₹5L", "₹5-10L", "₹10-15L", "₹15-20L", "Above ₹20L"] };
       }
       if (userMessage === "End Conversation") {
@@ -169,85 +167,108 @@ async function handleTestDriveFlow(session, userMessage, model, pool) {
         session.conversationEnded = true;
         return null;
       }
+    }
 
-      return { message: "Please choose:", options: ["Explore More", "End Conversation"] };
-
-    default:
-      return { message: "Please continue with your test drive booking.", options: ["Confirm", "Reject"] };
+    return { message: responseData.message, options: responseData.options || ["Confirm", "Reject"] };
+  } catch (e) {
+    return { message: llmResponse.text, options: ["Confirm", "Reject"] };
   }
 }
 
-// ------------------ Main Flow ------------------
-async function handleBrowseUsedCars(session, userMessage, model, pool) {
+// ------------------ LLM-Driven Browse Cars Flow ------------------
+async function handleBrowseUsedCars(session, userMessage, model) {
   const BUDGET_OPTIONS = ["Under ₹5L", "₹5-10L", "₹10-15L", "₹15-20L", "Above ₹20L"];
+  
   session.requirements = session.requirements || { budget: null, type: null, brand: null };
   session.step = session.step || 'browse_start';
 
-  // 1️⃣ Browsing Flow
-  if (session.step.startsWith('browse')) {
-    if (!userMessage || userMessage.trim().length === 0) {
-      session.step = 'browse_budget';
-      return { message: "Let's start by selecting your budget for cars 🚗", options: BUDGET_OPTIONS };
+  // 1️⃣ Pre-extract info from first user message if available
+  if (!session.requirements.preFilled && userMessage && model) {
+    try {
+      const extracted = await extractFilters(model, userMessage); // should return { budget?, type?, brand? }
+      session.requirements = { ...session.requirements, ...extracted, preFilled: true };
+    } catch (e) {
+      console.log("⚠️ Filter extraction failed, continuing without pre-fill");
     }
+  }
 
-    const filters = await extractFilters(model, userMessage);
-    if (filters) session.requirements = { ...session.requirements, ...filters };
+  // 2️⃣ Determine next missing requirement
+  const nextReq = !session.requirements.budget ? 'budget' :
+                  !session.requirements.type ? 'type' :
+                  !session.requirements.brand ? 'brand' : null;
 
-    const nextReq = !session.requirements.budget ? 'budget' :
-                    !session.requirements.type ? 'type' :
-                    !session.requirements.brand ? 'brand' : null;
+  // 3️⃣ If all requirements collected, show filtered cars
+  if (!nextReq) {
+    try {
+      const cars = await getCarsByFilter(pool, session.requirements.budget, session.requirements.type, session.requirements.brand);
+      session.filteredCars = cars;
+      session.carIndex = 0;
+      session.step = 'show_cars';
 
-    if (!nextReq) {
-      try {
-        const cars = await getCarsByFilter(pool, session.requirements.budget, session.requirements.type, session.requirements.brand);
-        session.filteredCars = cars;
-        session.carIndex = 0;
-
-        if (!cars || cars.length === 0) {
-          return { message: `Sorry! Couldn't find matching cars.`, options: ["Change criteria", "Notify me"] };
-        }
-
-        session.step = 'show_cars';
-        return await getCarDisplayChunk(session, pool);
-      } catch (e) {
-        console.error('❌ getCarsByFilter failed:', e);
-        return { message: 'Something went wrong fetching cars. Try again later.', options: ["Try again", "Change criteria"] };
+      if (!cars || cars.length === 0) {
+        return { message: "No cars found matching your criteria. Would you like to change your preferences?", options: ["Change criteria", "Notify me"] };
       }
+
+      return await getCarDisplayChunk(session);
+    } catch (e) {
+      console.error('Error fetching cars:', e);
+      return { message: "Oops! Something went wrong fetching cars. Try again?", options: ["Try again", "Change criteria"] };
     }
-
-    // Ask next requirement
-    let options = [];
-    if (nextReq === 'budget') options = BUDGET_OPTIONS;
-    else if (nextReq === 'type') options = ['All Types', ...(await getAvailableTypes(pool, session.requirements.budget)).slice(0, 6)];
-    else if (nextReq === 'brand') options = ['Any Brand', ...(await getAvailableBrands(pool, session.requirements.budget, session.requirements.type)).slice(0, 6)];
-
-    const llmResponse = await model.generate({
-      prompt: `
-        SYSTEM: You are AutoSherpa, a friendly assistant helping users browse used cars.
-        User message: "${userMessage}"
-        Next requirement: "${nextReq}"
-        Known requirements: ${JSON.stringify(session.requirements)}
-        Button options: ${JSON.stringify(options)}
-        Reply conversationally in 1 sentence, then show the button options.
-      `,
-      max_tokens: 80
-    });
-
-    return { message: llmResponse.text, options };
   }
 
-  // 2️⃣ Show Cars
-  if (session.step === 'show_cars') {
-    return await getCarDisplayChunk(session, pool);
-  }
+  // 4️⃣ Prompt user for next missing requirement
+  let options = [];
+  if (nextReq === 'budget') options = BUDGET_OPTIONS;
+  else if (nextReq === 'type') options = ['All Types', ...(await getAvailableTypes(pool, session.requirements.budget)).slice(0, 6)];
+  else if (nextReq === 'brand') options = ['Any Brand', ...(await getAvailableBrands(pool, session.requirements.budget, session.requirements.type)).slice(0, 6)];
 
-  // 3️⃣ Car Selected Options
-  if (session.step === 'car_selected_options' || session.step.startsWith('test_drive')) {
-    return await handleTestDriveFlow(session, userMessage, model, pool);
-  }
+  // 5️⃣ LLM-friendly prompt with existing requirements
+  const existingInfo = [];
+  if (session.requirements.budget) existingInfo.push(`Budget: ${session.requirements.budget}`);
+  if (session.requirements.type) existingInfo.push(`Type: ${session.requirements.type}`);
+  if (session.requirements.brand) existingInfo.push(`Brand: ${session.requirements.brand}`);
 
-  // 4️⃣ Default fallback
-  return { message: "Let's continue browsing cars.", options: BUDGET_OPTIONS };
+  if (model) {
+    try {
+      const llmResponse = await model.generateContent(`
+You are AutoSherpa, assisting the user to browse cars.
+
+CURRENT CONTEXT:
+- User Message: "${userMessage}"
+- Next Requirement Needed: ${nextReq}
+- Collected Info: ${JSON.stringify(session.requirements)}
+
+GUIDELINES:
+1. Acknowledge existing info if any.
+2. Ask for the next missing requirement in a friendly way.
+3. Offer options to proceed or start fresh if user wants.
+4. Extract any info present in the user message.
+5. Response must be JSON:
+{ "message": "text", "options": ["button1","button2"], "extracted_info": {"budget":"", "type":"", "brand":""} }
+        `);
+
+      const responseData = JSON.parse(llmResponse.response.text());
+      
+      // Merge extracted info
+      if (responseData.extracted_info) {
+        session.requirements = { ...session.requirements, ...responseData.extracted_info };
+      }
+
+      return { 
+        message: responseData.message, 
+        options: responseData.options || options 
+      };
+    } catch (e) {
+      console.warn('LLM JSON parse failed, fallback to default options.');
+    }
+  }
+  
+  // Fallback response when no model or LLM fails
+  return {
+    message: `Let's provide your ${nextReq}.`,
+    options
+  };
 }
 
 module.exports = { handleBrowseUsedCars };
+
