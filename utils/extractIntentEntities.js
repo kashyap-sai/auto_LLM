@@ -1,13 +1,13 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 async function callGemini(message, prompt) {
-  if (!process.env.GEMINI_API_KEY) {
+  if (!'AIzaSyCWGLV6ZOEVXGmXvptVL65Z9d1ownwvTfo') {
     console.log("⚠️ GEMINI_API_KEY not set, returning default intent");
     return null;
   }
   
   try {
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const genAI = new GoogleGenerativeAI('AIzaSyCWGLV6ZOEVXGmXvptVL65Z9d1ownwvTfo');
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
     const result = await model.generateContent(prompt);
     const text = result.response.text();
@@ -23,35 +23,43 @@ async function callGemini(message, prompt) {
 }
 
 async function generateLLMResponse(message, intent, entities) {
-  if (!process.env.GEMINI_API_KEY) {
+  // Ensure message is a string
+  const messageStr = typeof message === 'string' ? message : String(message || '');
+  
+  if (!'AIzaSyCWGLV6ZOEVXGmXvptVL65Z9d1ownwvTfo') {
     console.log("⚠️ GEMINI_API_KEY not set, using fallback response");
-    return generateFallbackResponse(message, intent, entities);
+    return generateFallbackResponse(messageStr, intent, entities);
   }
   
   try {
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const genAI = new GoogleGenerativeAI('AIzaSyCWGLV6ZOEVXGmXvptVL65Z9d1ownwvTfo');
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
     
-    const responsePrompt = `You are AutoSherpa, a friendly Hyundai chatbot assistant. Generate a unique, contextual response for the user's message.
+    const responsePrompt = 
+    
+    `You are AutoSherpa, a professional Hyundai dealership assistant. Generate a unique, contextual response for the user's message.
 
-USER MESSAGE: "${message}"
-DETECTED INTENT: ${intent}
-EXTRACTED ENTITIES: ${JSON.stringify(entities)}
+    USER MESSAGE: "${messageStr}"
+    DETECTED INTENT: ${intent}
+    EXTRACTED ENTITIES: ${JSON.stringify(entities)}
 
-RESPONSE RULES:
-- Generate a UNIQUE response that matches the user's specific message
-- Use appropriate emojis and conversational tone
-- Be enthusiastic and helpful
-- Make it feel personal and engaging
-- Vary your language and style
-- Acknowledge any extracted entities naturally
+    PROFESSIONAL RESPONSE GUIDELINES:
+    - Generate a UNIQUE response that matches the user's specific message
+    - Maintain a professional yet friendly tone
+    - Use appropriate emojis sparingly (1-2 maximum)
+    - Be helpful and informative without being overly enthusiastic
+    - Vary your language and avoid repetitive phrases
+    - Acknowledge extracted entities naturally and professionally
+    - Keep responses concise and to the point
+    - Avoid using the same words/phrases repeatedly
+    - Sound knowledgeable and trustworthy
 
-EXAMPLES:
-- For "I want hyndai car" with brand: "Hyundai" → "Perfect! I'd love to show you our amazing Hyundai cars! 🚗✨"
-- For "Show me cars for 7 ls" with budgetMax: 7 → "Great! Let's find some fantastic cars in your ₹5-10L budget range! 🚗💫"
-- For "Looking for honda city" with brand: "Honda", model: "City" → "Excellent choice! The Honda City is a fantastic sedan! Let me show you our available options! 🚗🌟"
+    EXAMPLES OF PROFESSIONAL RESPONSES:
+    - For "I want hyndai car" with brand: "Hyundai" → "I'd be happy to show you our Hyundai inventory. What's your budget range? 🚗"
+    - For "Show me cars for 7 ls" with budgetMax: 7 → "Let me find vehicles in your ₹5-10L range. What type of car interests you? 🚗"
+    - For "Looking for honda city" with brand: "Honda", model: "City" → "The Honda City is an excellent choice. I can show you our available options. What's your budget? 🚗"
 
-Generate ONLY the response message (no JSON, no quotes, just the message):`;
+    Generate ONLY the response message (no JSON, no quotes, just the message):`;
 
     const result = await model.generateContent(responsePrompt);
     const response = result.response.text().trim();
@@ -60,12 +68,14 @@ Generate ONLY the response message (no JSON, no quotes, just the message):`;
     return response.replace(/^["']|["']$/g, '');
   } catch (err) {
     console.error("LLM response generation error:", err.message);
-    return generateFallbackResponse(message, intent, entities);
+    return generateFallbackResponse(messageStr, intent, entities);
   }
 }
 
 function extractEntitiesFallback(message, history = []) {
-  const msg = message.toLowerCase();
+  // Ensure message is a string
+  const messageStr = typeof message === 'string' ? message : String(message || '');
+  const msg = messageStr.toLowerCase();
   const entities = {};
   let intent = 'other';
   
@@ -81,22 +91,17 @@ function extractEntitiesFallback(message, history = []) {
                                 sessionState.step === 'show_cars' ||
                                 (sessionState.requirements && Object.keys(sessionState.requirements).length > 0);
   
-  // Extract budget with typo tolerance
+  // Extract budget with typo tolerance - standardized format
   const budgetMatch = msg.match(/(\d+)\s*(lakh|lakhs|lac|lacs|ljs|ljsa|ls|l)/);
   if (budgetMatch) {
     const amount = parseInt(budgetMatch[1]);
-    entities.budgetMax = amount;
     if (amount < 5) {
-      entities.budgetRange = 'Under ₹5L';
       entities.budget = 'Under ₹5L';
     } else if (amount >= 5 && amount < 10) {
-      entities.budgetRange = '₹5-10L';
       entities.budget = '₹5-10L';
     } else if (amount >= 10 && amount < 15) {
-      entities.budgetRange = '₹10-15L';
       entities.budget = '₹10-15L';
     } else {
-      entities.budgetRange = 'Above ₹15L';
       entities.budget = 'Above ₹15L';
     }
   }
@@ -157,7 +162,8 @@ function extractEntitiesFallback(message, history = []) {
   if (msg.includes('electric') || msg.includes('ev')) entities.fuel = 'Electric';
   
   // Determine intent with context awareness
-  if (msg.includes('price') || msg.includes('value') || msg.includes('valuation') || msg.includes('worth')) {
+  if (msg.includes('price') || msg.includes('value') || msg.includes('valuation') || msg.includes('worth') || 
+      msg.includes('sell') || msg.includes('selling') || msg.includes('get rid of') || msg.includes('dispose')) {
     intent = 'car_valuation';
   } else if (msg.includes('test') && msg.includes('drive')) {
     intent = 'test_drive';
@@ -201,7 +207,7 @@ function extractEntitiesFallback(message, history = []) {
     } else {
       intent = 'test_drive'; // Stay in test drive flow
     }
-  } else if (msg.includes('car') || msg.includes('vehicle') || msg.includes('buy') || msg.includes('sell') || 
+  } else if (msg.includes('car') || msg.includes('vehicle') || msg.includes('buy') || 
              msg.includes('looking') || msg.includes('want') || msg.includes('need') || msg.includes('show') ||
              Object.keys(entities).length > 0) {
     intent = 'browse_cars';
@@ -219,7 +225,9 @@ function extractEntitiesFallback(message, history = []) {
 }
 
 function generateFallbackResponse(message, intent, entities) {
-  const msg = message.toLowerCase();
+  // Ensure message is a string
+  const messageStr = typeof message === 'string' ? message : String(message || '');
+  const msg = messageStr.toLowerCase();
   
   // Generate contextual responses based on extracted entities and message content
   if (entities.brand && entities.model) {
@@ -230,9 +238,8 @@ function generateFallbackResponse(message, intent, entities) {
     return `Great! The ${entities.model} is an amazing car! Let me show you our available options! 🚗🌟`;
   } else if (entities.type) {
     return `Perfect! I have some fantastic ${entities.type} cars waiting for you! 🚗✨`;
-  } else if (entities.budgetMax) {
-    const budgetRange = entities.budgetRange || '₹5-10L';
-    return `Great! Let's find some amazing cars in your ${budgetRange} budget range! 🚗💫`;
+  } else if (entities.budget) {
+    return `Great! Let's find some amazing cars in your ${entities.budget} budget range! 🚗💫`;
   } else if (entities.fuel) {
     return `Excellent! I have some fantastic ${entities.fuel} cars for you! 🚗🌟`;
   } else if (intent === 'browse_cars') {
@@ -304,6 +311,24 @@ async function extractIntentEntities(message, history = []) {
     const sessionState = typeof history === 'object' && !Array.isArray(history) ? history : {};
     const historyArray = Array.isArray(history) ? history : [];
     
+    // Initialize conversation history tracking if not exists
+    if (!sessionState.conversationHistory) {
+      sessionState.conversationHistory = [];
+    }
+    
+    // Add current message to conversation history
+    const currentMessage = typeof message === 'string' ? message : String(message || '');
+    sessionState.conversationHistory.push({
+      message: currentMessage,
+      timestamp: new Date().toISOString(),
+      intent: null // Will be filled after intent extraction
+    });
+    
+    // Keep only last 10 messages to avoid memory issues
+    if (sessionState.conversationHistory.length > 10) {
+      sessionState.conversationHistory = sessionState.conversationHistory.slice(-10);
+    }
+    
     // Create a comprehensive prompt for intent and entity extraction with response generation
     const prompt = `You are AutoSherpa, a friendly Hyundai chatbot assistant for Sherpa Hyundai dealership.
 
@@ -313,33 +338,35 @@ CRITICAL TYPO TOLERANCE RULES:
 - Be extremely forgiving with spelling variations
 - Correct common typos automatically
 
-ENTITY EXTRACTION WITH TYPO TOLERANCE:
+ENTITY EXTRACTION WITH TYPO TOLERANCE (STANDARDIZED FORMAT):
 - brand: Extract from typos like "hyndai"→"Hyundai", "maruthi"→"Maruti", "honda"→"Honda", "toyota"→"Toyota", "tata"→"Tata", "mahindra"→"Mahindra", "kia"→"Kia", "volkswagen"→"Volkswagen", "skoda"→"Skoda", "ford"→"Ford", "chevrolet"→"Chevrolet", "nissan"→"Nissan", "renault"→"Renault"
 - model: Extract from typos like "cty"→"City", "swft"→"Swift", "innova"→"Innova", "nexon"→"Nexon", "creta"→"Creta", "verna"→"Verna", "santro"→"Santro", "baleno"→"Baleno", "dzire"→"Dzire", "alto"→"Alto", "polo"→"Polo", "vento"→"Vento", "amaze"→"Amaze", "jazz"→"Jazz", "civic"→"Civic", "accord"→"Accord", "corolla"→"Corolla", "camry"→"Camry", "fortuner"→"Fortuner", "scorpio"→"Scorpio", "thar"→"Thar", "bolero"→"Bolero", "i20"→"i20"
 - type: Extract from typos like "s.u.v"→"SUV", "seden"→"Sedan", "hatch"→"Hatchback", "coup"→"Coupe", "convert"→"Convertible", "wagn"→"Wagon", "pick"→"Pickup"
 - fuel: Extract from typos like "petrol"→"Petrol", "diesel"→"Diesel", "c.n.g"→"CNG", "electric"→"Electric"
-- budgetMax: Extract numbers from typos like "ljsa", "ljs", "ls", "lac", "lakh" → convert to number
-- budgetRange: Categorize budget as "Under ₹5L", "₹5-10L", "₹10-15L", "Above ₹15L"
+- budget: Extract numbers from typos like "ljsa", "ljs", "ls", "lac", "lakh" → categorize as "Under ₹5L", "₹5-10L", "₹10-15L", "Above ₹15L"
 
 INTENT CLASSIFICATION RULES:
-- browse_cars: User wants to see/search/buy cars, vehicles, SUVs, sedans, etc. OR mentions specific budget/price ranges OR mentions any car brand/model/type
-- car_valuation: User wants price estimate, valuation, appraisal, "what's my car worth", "how much is my car", "car value"
+- browse_cars: User wants to see/search/buy cars, vehicles, SUVs, sedans, etc. OR mentions specific budget/price ranges OR mentions any car brand/model/type OR asks about brands ("what brands you have", "which brands", "show me brands", "brand options")
+- car_valuation: User wants price estimate, valuation, appraisal, "what's my car worth", "how much is my car", "car value", "I want to sell my car", "sell my car", "get rid of my car", "dispose of my car", "trade in my car"
 - test_drive: User mentions test drive, booking test drive, trying cars (BUT route to browse_cars first)
 - contact_team: User wants to contact, call, visit, speak to someone
 - about_us: User asks about company, services, story, locations, "who are you"
 - greeting: Hello, hi, good morning, namaste, etc.
 - other: Everything else, off-topic, unclear requests, weather, jokes, personal topics
 
-Return strict JSON with these keys:
+SPECIAL HANDLING FOR BRAND QUESTIONS:
+- Detect if user is asking about brands: "what brands you have", "which brands", "show me brands", "brand options", "what car brands", "available brands"
+- Check conversation history for previous brand questions
+- If this is a repeated brand question, mark as "repeated_brand_question" in entities
+
+Return strict JSON with these keys (STANDARDIZED FORMAT):
 {
   "intent": "browse_cars"|"car_valuation"|"test_drive"|"contact_team"|"about_us"|"greeting"|"other",
   "entities": {
     "brand": "string|null",
     "model": "string|null", 
-    "type": "suv"|"sedan"|"hatchback"|"coupe"|"convertible"|"wagon"|"pickup"|null,
-    "budgetMin": "number|null",
-    "budgetMax": "number|null",
-    "budgetRange": "string|null (e.g., 'under 5 lakhs', '5-10 lakhs')",
+    "type": "SUV"|"Sedan"|"Hatchback"|"Coupe"|"Convertible"|"Wagon"|"Pickup"|null,
+    "budget": "Under ₹5L"|"₹5-10L"|"₹10-15L"|"₹15-20L"|"Above ₹20L"|null,
     "year": "number|null",
     "fuel": "Petrol"|"Diesel"|"CNG"|"Electric"|null,
     "kms": "string|null",
@@ -349,7 +376,8 @@ Return strict JSON with these keys:
     "phone": "string|null",
     "location": "string|null",
     "time": "string|null",
-    "reason": "string|null"
+    "reason": "string|null",
+    "repeated_brand_question": "boolean|null"
   },
   "confidence": "number between 0.0 and 1.0"
 }
@@ -358,7 +386,10 @@ User message: "${message}"
 
 ${historyArray.length > 0 ? `Previous conversation context: ${JSON.stringify(historyArray.slice(-3))}` : ''}
 ${sessionState.step ? `Current session step: ${sessionState.step}` : ''}
-${sessionState.requirements ? `Current requirements: ${JSON.stringify(sessionState.requirements)}` : ''}`;
+${sessionState.requirements ? `Current requirements: ${JSON.stringify(sessionState.requirements)}` : ''}
+${sessionState.conversationHistory ? `Recent conversation history: ${JSON.stringify(sessionState.conversationHistory.slice(-5))}` : ''}
+
+IMPORTANT: Check if this is a repeated brand question by looking at conversation history. If user previously asked about brands and is asking again, set "repeated_brand_question": true in entities.`;
 
     const result = await callGemini(message, prompt);
     
@@ -368,8 +399,14 @@ ${sessionState.requirements ? `Current requirements: ${JSON.stringify(sessionSta
       const entities = result.entities || {};
       const confidence = typeof result.confidence === 'number' ? result.confidence : 0.5;
       
+      // Update conversation history with detected intent
+      if (sessionState.conversationHistory && sessionState.conversationHistory.length > 0) {
+        sessionState.conversationHistory[sessionState.conversationHistory.length - 1].intent = intent;
+      }
+      
       // Generate LLM response based on extracted intent and entities
-      const llmMessage = await generateLLMResponse(message, intent, entities);
+      const messageStr = typeof message === 'string' ? message : String(message || '');
+      const llmMessage = await generateLLMResponse(messageStr, intent, entities);
       
       return {
         intent,
@@ -380,8 +417,9 @@ ${sessionState.requirements ? `Current requirements: ${JSON.stringify(sessionSta
     }
     
     // Fallback: Extract entities using pattern matching when LLM fails
-    const fallbackResult = extractEntitiesFallback(message, sessionState);
-    const fallbackMessage = await generateLLMResponse(message, fallbackResult.intent, fallbackResult.entities, sessionState);
+    const fallbackMessageStr = typeof message === 'string' ? message : String(message || '');
+    const fallbackResult = extractEntitiesFallback(fallbackMessageStr, sessionState);
+    const fallbackMessage = await generateLLMResponse(fallbackMessageStr, fallbackResult.intent, fallbackResult.entities, sessionState);
     
     return {
       intent: fallbackResult.intent,
@@ -395,8 +433,9 @@ ${sessionState.requirements ? `Current requirements: ${JSON.stringify(sessionSta
     
     // Generate LLM response even in error cases
     const sessionState = typeof history === 'object' && !Array.isArray(history) ? history : {};
-    const errorResult = extractEntitiesFallback(message, sessionState);
-    const errorMessage = await generateLLMResponse(message, errorResult.intent, errorResult.entities, sessionState);
+    const messageStr = typeof message === 'string' ? message : String(message || '');
+    const errorResult = extractEntitiesFallback(messageStr, sessionState);
+    const errorMessage = await generateLLMResponse(messageStr, errorResult.intent, errorResult.entities, sessionState);
     
     return {
       intent: errorResult.intent,
