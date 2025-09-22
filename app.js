@@ -5,10 +5,11 @@ const axios = require('axios');
 
 // Import database connection
 const pool = require('./db');
-const { routeMessage } = require('./utils/mainRouter');
+const { routeMessage } = require('./utils/llmDrivenRouter');
 const { extractIntentEntities } = require('./utils/extractIntentEntities');
 const MessageLogger = require('./utils/messageLogger');
-const sessions = {}; 
+const sessions = {};
+const processedMessages = new Set(); // Track processed messages to prevent duplicates 
 
 const app = express();
 app.use(bodyParser.json());
@@ -83,11 +84,31 @@ app.post('/webhook', async (req, res) => {
       msg?.interactive?.button_reply?.title;
 
     if (from && userMsg) {
+      // Create unique message ID for duplicate detection
+      const messageId = msg?.id || `${from}_${userMsg}_${Date.now()}`;
+      
+      // Check for duplicate messages
+      if (processedMessages.has(messageId)) {
+        console.log('🔄 Duplicate message detected, ignoring:', messageId);
+        return res.sendStatus(200);
+      }
+      
+      // Mark message as processed
+      processedMessages.add(messageId);
+      
+      // Clean up old processed messages (keep only last 100)
+      if (processedMessages.size > 100) {
+        const messagesArray = Array.from(processedMessages);
+        processedMessages.clear();
+        messagesArray.slice(-50).forEach(id => processedMessages.add(id));
+      }
+
       if (!sessions[from]) sessions[from] = {};
 
       console.log('\n📩 Incoming Message');
       console.log('From:', from);
       console.log('Message:', userMsg);
+      console.log('Message ID:', messageId);
       console.log('Session Before:', JSON.stringify(sessions[from], null, 2));
       
       // Additional validation
@@ -124,11 +145,18 @@ app.post('/webhook', async (req, res) => {
 
       let response;
       try {
-        // Optionally store extracted intent in session for routing hints
+        // Store previous entities before updating (so router can merge them)
+        const previousEntities = sessions[from].lastEntities || {};
+        
+        // Temporarily store previous entities in session for router to use
+        sessions[from].previousEntities = previousEntities;
+        
+        // Update session with current intent/entities
         sessions[from].lastIntent = intentData.intent;
         sessions[from].lastEntities = intentData.entities;
         sessions[from].lastConfidence = typeof intentData.confidence === 'number' ? intentData.confidence : 0.0;
-        response = await routeMessage(sessions[from], userMsg, pool);
+        
+        response = await routeMessage(userMsg, sessions[from]);
         console.log('Session After:', JSON.stringify(sessions[from], null, 2));
         console.log('Response:', JSON.stringify(response, null, 2));
         console.log('----------------------------------');

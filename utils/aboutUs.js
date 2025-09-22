@@ -14,11 +14,52 @@ const returnToMenuOptions = [
   "👋 End conversation",
 ];
 
-async function handleAboutUsStep(session, userMessage) {
+async function handleAboutUsStep(session, userMessage, model = null) {
   const step = session.step || "about_menu";
   console.log("📘 About Us - Current Step:", step);
   console.log("📝 User Input:", userMessage);
 
+  // If we have an LLM model, use it for generating responses
+  if (model) {
+    try {
+      const { getSystemPrompt } = require('./llmSystemPrompts');
+      const systemPrompt = getSystemPrompt("about_us");
+      
+      // Build conversation context
+      const conversationHistory = session.conversationHistory || [];
+      const historyText = conversationHistory.length > 0 
+        ? `Previous conversation:\n${conversationHistory.map(h => `User: ${h.user}\nBot: ${h.bot}`).join('\n')}\n\n`
+        : '';
+      
+      const llmResponse = await model.generateContent(
+        `${systemPrompt}\n${historyText}Current user message: "${userMessage}"\nCurrent step: ${step}\nGenerate a friendly response in JSON format: {"message": "...", "options": [...]}`
+      );
+
+      const parsed = JSON.parse(llmResponse.response.text());
+      
+      // Update conversation history
+      session.conversationHistory = session.conversationHistory || [];
+      session.conversationHistory.push({
+        user: userMessage,
+        bot: parsed.message,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Keep only last 10 exchanges to avoid token limits
+      if (session.conversationHistory.length > 10) {
+        session.conversationHistory = session.conversationHistory.slice(-10);
+      }
+      
+      return {
+        message: parsed.message || "Welcome to Sherpa Hyundai! Here's what you'd like to know about us:",
+        options: parsed.options || aboutUsMenu
+      };
+    } catch (e) {
+      console.log("⚠️ LLM response failed, falling back to hardcoded responses:", e.message);
+    }
+  }
+
+  // Fallback to hardcoded responses if LLM fails or not available
   switch (step) {
     case "about_start":
     case "about_menu":

@@ -1,11 +1,11 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 async function callGemini(message, prompt) {
-  if (!process.env.GEMINI_API_KEY) {
+  if (!'AIzaSyBvY2Kp-0IsPUpczxzsH5vUwdX2j4p932g') {
     return null;
   }
   try {
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const genAI = new GoogleGenerativeAI('AIzaSyBvY2Kp-0IsPUpczxzsH5vUwdX2j4p932g');
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
     const result = await model.generateContent(prompt);
     const text = result.response.text();

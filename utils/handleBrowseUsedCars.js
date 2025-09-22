@@ -179,28 +179,126 @@ RESPONSE FORMAT:
 async function handleBrowseUsedCars(session, userMessage, model) {
   const BUDGET_OPTIONS = ["Under ₹5L", "₹5-10L", "₹10-15L", "₹15-20L", "Above ₹20L"];
   
-  session.requirements = session.requirements || { budget: null, type: null, brand: null };
+  // Initialize requirements only if not already set (preserve extracted requirements)
+  if (!session.requirements) {
+    session.requirements = { budget: null, type: null, brand: null };
+  }
   session.step = session.step || 'browse_start';
+  
+  console.log("🔍 Browse Cars - Initial requirements:", JSON.stringify(session.requirements, null, 2));
 
-  // 1️⃣ Pre-extract info from first user message if available
-  if (!session.requirements.preFilled && userMessage && model) {
-    try {
-      const extracted = await extractFilters(model, userMessage); // should return { budget?, type?, brand? }
-      session.requirements = { ...session.requirements, ...extracted, preFilled: true };
-    } catch (e) {
-      console.log("⚠️ Filter extraction failed, continuing without pre-fill");
+  // 1️⃣ Handle user input - extract info from ANY user message OR button selection
+  if (userMessage) {
+    // Check if it's a button selection (exact match with options)
+    const budgetOptions = ["Under ₹5L", "₹5-10L", "₹10-15L", "₹15-20L", "Above ₹20L"];
+    const typeOptions = ["All Types", "Hatchback", "MUV", "SUV", "Sedan"];
+    const brandOptions = ["Any Brand", "Hyundai", "Maruti", "Tata", "Honda", "Toyota", "Mahindra", "Kia"];
+    
+    // Handle special commands
+    if (userMessage.toLowerCase().includes('change') || userMessage.toLowerCase().includes('modify') || userMessage.toLowerCase().includes('different')) {
+      // User wants to change something - ask what they want to change
+      const currentReqs = [];
+      if (session.requirements.budget) currentReqs.push(`Budget: ${session.requirements.budget}`);
+      if (session.requirements.type) currentReqs.push(`Type: ${session.requirements.type}`);
+      if (session.requirements.brand) currentReqs.push(`Brand: ${session.requirements.brand}`);
+      
+      return {
+        message: `What would you like to change? Current: ${currentReqs.join(', ')}`,
+        options: ["Change Budget", "Change Type", "Change Brand", "Start Over"]
+      };
     }
+    
+    if (userMessage === "Change Budget") {
+      return {
+        message: "Please select your budget:",
+        options: budgetOptions
+      };
+    } else if (userMessage === "Change Type") {
+      return {
+        message: "Please select car type:",
+        options: typeOptions
+      };
+    } else if (userMessage === "Change Brand") {
+      return {
+        message: "Please select brand:",
+        options: brandOptions
+      };
+    } else if (userMessage === "Start Over") {
+      session.requirements = { budget: null, type: null, brand: null };
+      return {
+        message: "Let's start fresh! What's your budget?",
+        options: budgetOptions
+      };
+    } else if (budgetOptions.includes(userMessage)) {
+      session.requirements.budget = userMessage;
+      console.log("🔍 Browse Cars - Budget selected:", userMessage);
+    } else if (typeOptions.includes(userMessage)) {
+      session.requirements.type = userMessage === "All Types" ? null : userMessage;
+      console.log("🔍 Browse Cars - Type selected:", userMessage);
+    } else if (brandOptions.includes(userMessage)) {
+      session.requirements.brand = userMessage === "Any Brand" ? null : userMessage;
+      console.log("🔍 Browse Cars - Brand selected:", userMessage);
+    } else if (model) {
+      // Try to extract from natural language
+      try {
+        const extracted = await extractFilters(model, userMessage);
+        if (extracted && Object.keys(extracted).length > 0) {
+          // Only merge non-null values to avoid overwriting existing requirements
+          const validExtracted = {};
+          Object.keys(extracted).forEach(key => {
+            if (extracted[key] !== null && extracted[key] !== undefined) {
+              validExtracted[key] = extracted[key];
+            }
+          });
+          
+          if (Object.keys(validExtracted).length > 0) {
+            // Smart merging: preserve existing values unless user explicitly wants to change them
+            const mergedRequirements = { ...session.requirements };
+            
+            // Only update if the new value is different and meaningful
+            if (validExtracted.budget && validExtracted.budget !== session.requirements.budget) {
+              mergedRequirements.budget = validExtracted.budget;
+              console.log(`🔄 Updated budget: ${session.requirements.budget} → ${validExtracted.budget}`);
+            }
+            if (validExtracted.type && validExtracted.type !== session.requirements.type) {
+              mergedRequirements.type = validExtracted.type;
+              console.log(`🔄 Updated type: ${session.requirements.type} → ${validExtracted.type}`);
+            }
+            if (validExtracted.brand && validExtracted.brand !== session.requirements.brand) {
+              mergedRequirements.brand = validExtracted.brand;
+              console.log(`🔄 Updated brand: ${session.requirements.brand} → ${validExtracted.brand}`);
+            }
+            
+            session.requirements = mergedRequirements;
+            console.log("🔍 Browse Cars - Extracted from text:", JSON.stringify(validExtracted, null, 2));
+            console.log("🔍 Browse Cars - Merged requirements:", JSON.stringify(session.requirements, null, 2));
+          }
+        }
+      } catch (e) {
+        console.log("⚠️ Filter extraction failed, continuing without update");
+      }
+    }
+    
+    console.log("🔍 Browse Cars - Updated requirements:", JSON.stringify(session.requirements, null, 2));
   }
 
-  // 2️⃣ Determine next missing requirement
-  const nextReq = !session.requirements.budget ? 'budget' :
+  // 2️⃣ Determine next missing requirement (STANDARDIZED FORMAT)
+  const hasBudget = !!session.requirements.budget;
+  const budgetToUse = session.requirements.budget;
+  const nextReq = !hasBudget ? 'budget' :
                   !session.requirements.type ? 'type' :
                   !session.requirements.brand ? 'brand' : null;
+  
+  console.log("🔍 Browse Cars - Requirement check:");
+  console.log("  - hasBudget:", hasBudget, "(budget:", session.requirements.budget, ")");
+  console.log("  - hasType:", !!session.requirements.type);
+  console.log("  - hasBrand:", !!session.requirements.brand);
+  console.log("  - nextReq:", nextReq);
 
   // 3️⃣ If all requirements collected, show filtered cars
   if (!nextReq) {
     try {
-      const cars = await getCarsByFilter(pool, session.requirements.budget, session.requirements.type, session.requirements.brand);
+      const cars = await getCarsByFilter(pool, budgetToUse, session.requirements.type, session.requirements.brand);
       session.filteredCars = cars;
       session.carIndex = 0;
       session.step = 'show_cars';
@@ -219,12 +317,12 @@ async function handleBrowseUsedCars(session, userMessage, model) {
   // 4️⃣ Prompt user for next missing requirement
   let options = [];
   if (nextReq === 'budget') options = BUDGET_OPTIONS;
-  else if (nextReq === 'type') options = ['All Types', ...(await getAvailableTypes(pool, session.requirements.budget)).slice(0, 6)];
-  else if (nextReq === 'brand') options = ['Any Brand', ...(await getAvailableBrands(pool, session.requirements.budget, session.requirements.type)).slice(0, 6)];
+  else if (nextReq === 'type') options = ['All Types', ...(await getAvailableTypes(pool, budgetToUse)).slice(0, 6)];
+  else if (nextReq === 'brand') options = ['Any Brand', ...(await getAvailableBrands(pool, budgetToUse, session.requirements.type)).slice(0, 6)];
 
   // 5️⃣ LLM-friendly prompt with existing requirements
   const existingInfo = [];
-  if (session.requirements.budget) existingInfo.push(`Budget: ${session.requirements.budget}`);
+  if (hasBudget) existingInfo.push(`Budget: ${budgetToUse}`);
   if (session.requirements.type) existingInfo.push(`Type: ${session.requirements.type}`);
   if (session.requirements.brand) existingInfo.push(`Brand: ${session.requirements.brand}`);
 
@@ -239,12 +337,19 @@ CURRENT CONTEXT:
 - Collected Info: ${JSON.stringify(session.requirements)}
 
 GUIDELINES:
-1. Acknowledge existing info if any.
-2. Ask for the next missing requirement in a friendly way.
-3. Offer options to proceed or start fresh if user wants.
-4. Extract any info present in the user message.
-5. Response must be JSON:
-{ "message": "text", "options": ["button1","button2"], "extracted_info": {"budget":"", "type":"", "brand":""} }
+1. Generate ONLY ONE SENTENCE - keep it short and punchy!
+2. Ask for the next missing requirement in a friendly, engaging way
+3. Use humor and personality - be conversational!
+4. Extract any info present in the user message
+5. Response must be EXACT JSON format:
+{ "message": "Your ONE sentence message here", "options": ["button1","button2"], "extracted_info": {"budget":"", "type":"", "brand":""} }
+
+EXAMPLES (ONE SENTENCE ONLY):
+- For budget: "What's your dream budget range? 💰✨"
+- For type: "What type of car gets your heart racing? 🚗💫"
+- For brand: "Which brand speaks to you? 🏭✨"
+
+CRITICAL: Generate ONLY ONE SHORT SENTENCE based on the user's input!
         `);
 
       const responseData = JSON.parse(llmResponse.response.text());
@@ -264,8 +369,14 @@ GUIDELINES:
   }
   
   // Fallback response when no model or LLM fails
+  const fallbackMessages = {
+    budget: "What's your dream budget range? 💰✨",
+    type: "What type of car gets your heart racing? 🚗💫", 
+    brand: "Which brand speaks to you? 🏭✨"
+  };
+  
   return {
-    message: `Let's provide your ${nextReq}.`,
+    message: fallbackMessages[nextReq] || `Let's find your perfect ${nextReq}! 🚗✨`,
     options
   };
 }
