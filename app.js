@@ -5,7 +5,7 @@ const axios = require('axios');
 
 // Import database connection
 const pool = require('./db');
-const { routeMessage } = require('./utils/mainRouter');
+const { routeMessage } = require('./utils/llmDrivenRouter');
 const { extractIntentEntities } = require('./utils/extractIntentEntities');
 const MessageLogger = require('./utils/messageLogger');
 const sessions = {}; 
@@ -124,11 +124,18 @@ app.post('/webhook', async (req, res) => {
 
       let response;
       try {
-        // Optionally store extracted intent in session for routing hints
+        // Store previous entities before updating (so router can merge them)
+        const previousEntities = sessions[from].lastEntities || {};
+        
+        // Temporarily store previous entities in session for router to use
+        sessions[from].previousEntities = previousEntities;
+        
+        // Update session with current intent/entities
         sessions[from].lastIntent = intentData.intent;
         sessions[from].lastEntities = intentData.entities;
         sessions[from].lastConfidence = typeof intentData.confidence === 'number' ? intentData.confidence : 0.0;
-        response = await routeMessage(sessions[from], userMsg, pool);
+        
+        response = await routeMessage(userMsg, sessions[from]);
         console.log('Session After:', JSON.stringify(sessions[from], null, 2));
         console.log('Response:', JSON.stringify(response, null, 2));
         console.log('----------------------------------');
