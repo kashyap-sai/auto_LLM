@@ -52,9 +52,9 @@ async function enterFlow(flowType, flowHandler, userMessage, sessionState) {
   let model = null;
   
   // Create LLM instance only if API key is available
-  if ('AIzaSyCWGLV6ZOEVXGmXvptVL65Z9d1ownwvTfo') {
+  if ('AIzaSyBvY2Kp-0IsPUpczxzsH5vUwdX2j4p932g') {
     try {
-      const genAI = new GoogleGenerativeAI('AIzaSyCWGLV6ZOEVXGmXvptVL65Z9d1ownwvTfo');
+      const genAI = new GoogleGenerativeAI('AIzaSyBvY2Kp-0IsPUpczxzsH5vUwdX2j4p932g');
       model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
     } catch (e) {
       console.log("⚠️ Failed to create LLM instance, using fallback mode");
@@ -98,9 +98,9 @@ async function handleFallback(userMessage, sessionState) {
   let message = "I'm here to help! 😊 What would you like to do today?";
   let options = ["🚗 Browse Cars", "💰 Car Valuation", "📞 Contact Team", "ℹ️ About Us"];
 
-  if ('AIzaSyCWGLV6ZOEVXGmXvptVL65Z9d1ownwvTfo') {
+  if ('AIzaSyBvY2Kp-0IsPUpczxzsH5vUwdX2j4p932g') {
     try {
-      const genAI = new GoogleGenerativeAI('AIzaSyCWGLV6ZOEVXGmXvptVL65Z9d1ownwvTfo');
+      const genAI = new GoogleGenerativeAI('AIzaSyBvY2Kp-0IsPUpczxzsH5vUwdX2j4p932g');
       const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
       
       const systemPrompt = getSystemPrompt("fallback");
@@ -109,21 +109,21 @@ async function handleFallback(userMessage, sessionState) {
 
 User said: "${userMessage}"
 
-BE PROFESSIONAL AND HELPFUL! Generate ONLY ONE SENTENCE responses:
+BE CREATIVE AND HUMOROUS! Generate ONLY ONE SENTENCE responses:
 
 EXAMPLES:
-- For gibberish "asdfgh" → "I'm here to help you find the perfect car. What can I assist you with? 🚗"
-- For off-topic "weather" → "I specialize in helping with car needs. How can I assist you today? 🚗"
-- For greeting "hello" → "Hello! Welcome to Sherpa Hyundai. How can I help you? 🚗"
-- For unclear requests → "I'm here to help with your car needs. What would you like to do? 🚗"
+- For gibberish "asdfgh" → "Haha, looks like your keyboard had a party! 😄 Let's find your dream car instead! 🚗✨"
+- For off-topic "weather" → "I'm a car expert, not a weatherman! 🌤️ Let me show you our cars! 🚗✨"
+- For greeting "hello" → "Hello there! Welcome to Sherpa Hyundai! 🚗💫"
+- For unclear requests → "I'm here to help! Let me show you what I can do! 🤔✨"
 
-CRITICAL: Generate ONLY ONE SHORT PROFESSIONAL SENTENCE in this EXACT JSON format:
+CRITICAL: Generate ONLY ONE SHORT SENTENCE in this EXACT JSON format:
 {
   "message": "Your ONE sentence response here",
   "options": ["🚗 Browse Cars", "💰 Car Valuation", "📞 Contact Team", "ℹ️ About Us"]
 }
 
-Keep it professional, concise, and redirect to car services!`
+Keep it short, fun, and redirect to car services!`
       );
 
       const responseText = llmResponse.response.text();

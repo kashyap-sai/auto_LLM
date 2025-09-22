@@ -1,13 +1,13 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 async function callGemini(message, prompt) {
-  if (!'AIzaSyCWGLV6ZOEVXGmXvptVL65Z9d1ownwvTfo') {
+  if (!'AIzaSyBvY2Kp-0IsPUpczxzsH5vUwdX2j4p932g') {
     console.log("⚠️ GEMINI_API_KEY not set, returning default intent");
     return null;
   }
   
   try {
-    const genAI = new GoogleGenerativeAI('AIzaSyCWGLV6ZOEVXGmXvptVL65Z9d1ownwvTfo');
+    const genAI = new GoogleGenerativeAI('AIzaSyBvY2Kp-0IsPUpczxzsH5vUwdX2j4p932g');
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
     const result = await model.generateContent(prompt);
     const text = result.response.text();
@@ -26,38 +26,35 @@ async function generateLLMResponse(message, intent, entities) {
   // Ensure message is a string
   const messageStr = typeof message === 'string' ? message : String(message || '');
   
-  if (!'AIzaSyCWGLV6ZOEVXGmXvptVL65Z9d1ownwvTfo') {
+  if (!'AIzaSyBvY2Kp-0IsPUpczxzsH5vUwdX2j4p932g') {
     console.log("⚠️ GEMINI_API_KEY not set, using fallback response");
     return generateFallbackResponse(messageStr, intent, entities);
   }
   
   try {
-    const genAI = new GoogleGenerativeAI('AIzaSyCWGLV6ZOEVXGmXvptVL65Z9d1ownwvTfo');
+    const genAI = new GoogleGenerativeAI('AIzaSyBvY2Kp-0IsPUpczxzsH5vUwdX2j4p932g');
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
     
     const responsePrompt = 
     
-    `You are AutoSherpa, a professional Hyundai dealership assistant. Generate a unique, contextual response for the user's message.
+    `You are AutoSherpa, a friendly Hyundai chatbot assistant. Generate a unique, contextual response for the user's message.
 
     USER MESSAGE: "${messageStr}"
     DETECTED INTENT: ${intent}
     EXTRACTED ENTITIES: ${JSON.stringify(entities)}
 
-    PROFESSIONAL RESPONSE GUIDELINES:
+    RESPONSE RULES:
     - Generate a UNIQUE response that matches the user's specific message
-    - Maintain a professional yet friendly tone
-    - Use appropriate emojis sparingly (1-2 maximum)
-    - Be helpful and informative without being overly enthusiastic
-    - Vary your language and avoid repetitive phrases
-    - Acknowledge extracted entities naturally and professionally
-    - Keep responses concise and to the point
-    - Avoid using the same words/phrases repeatedly
-    - Sound knowledgeable and trustworthy
+    - Use appropriate emojis and conversational tone
+    - Be enthusiastic and helpful
+    - Make it feel personal and engaging
+    - Vary your language and style
+    - Acknowledge any extracted entities naturally
 
-    EXAMPLES OF PROFESSIONAL RESPONSES:
-    - For "I want hyndai car" with brand: "Hyundai" → "I'd be happy to show you our Hyundai inventory. What's your budget range? 🚗"
-    - For "Show me cars for 7 ls" with budgetMax: 7 → "Let me find vehicles in your ₹5-10L range. What type of car interests you? 🚗"
-    - For "Looking for honda city" with brand: "Honda", model: "City" → "The Honda City is an excellent choice. I can show you our available options. What's your budget? 🚗"
+    EXAMPLES:
+    - For "I want hyndai car" with brand: "Hyundai" → "Perfect! I'd love to show you our amazing Hyundai cars! 🚗✨"
+    - For "Show me cars for 7 ls" with budgetMax: 7 → "Great! Let's find some fantastic cars in your ₹5-10L budget range! 🚗💫"
+    - For "Looking for honda city" with brand: "Honda", model: "City" → "Excellent choice! The Honda City is a fantastic sedan! Let me show you our available options! 🚗🌟"
 
     Generate ONLY the response message (no JSON, no quotes, just the message):`;
 
@@ -311,24 +308,6 @@ async function extractIntentEntities(message, history = []) {
     const sessionState = typeof history === 'object' && !Array.isArray(history) ? history : {};
     const historyArray = Array.isArray(history) ? history : [];
     
-    // Initialize conversation history tracking if not exists
-    if (!sessionState.conversationHistory) {
-      sessionState.conversationHistory = [];
-    }
-    
-    // Add current message to conversation history
-    const currentMessage = typeof message === 'string' ? message : String(message || '');
-    sessionState.conversationHistory.push({
-      message: currentMessage,
-      timestamp: new Date().toISOString(),
-      intent: null // Will be filled after intent extraction
-    });
-    
-    // Keep only last 10 messages to avoid memory issues
-    if (sessionState.conversationHistory.length > 10) {
-      sessionState.conversationHistory = sessionState.conversationHistory.slice(-10);
-    }
-    
     // Create a comprehensive prompt for intent and entity extraction with response generation
     const prompt = `You are AutoSherpa, a friendly Hyundai chatbot assistant for Sherpa Hyundai dealership.
 
@@ -346,18 +325,13 @@ ENTITY EXTRACTION WITH TYPO TOLERANCE (STANDARDIZED FORMAT):
 - budget: Extract numbers from typos like "ljsa", "ljs", "ls", "lac", "lakh" → categorize as "Under ₹5L", "₹5-10L", "₹10-15L", "Above ₹15L"
 
 INTENT CLASSIFICATION RULES:
-- browse_cars: User wants to see/search/buy cars, vehicles, SUVs, sedans, etc. OR mentions specific budget/price ranges OR mentions any car brand/model/type OR asks about brands ("what brands you have", "which brands", "show me brands", "brand options")
+- browse_cars: User wants to see/search/buy cars, vehicles, SUVs, sedans, etc. OR mentions specific budget/price ranges OR mentions any car brand/model/type
 - car_valuation: User wants price estimate, valuation, appraisal, "what's my car worth", "how much is my car", "car value", "I want to sell my car", "sell my car", "get rid of my car", "dispose of my car", "trade in my car"
 - test_drive: User mentions test drive, booking test drive, trying cars (BUT route to browse_cars first)
 - contact_team: User wants to contact, call, visit, speak to someone
 - about_us: User asks about company, services, story, locations, "who are you"
 - greeting: Hello, hi, good morning, namaste, etc.
 - other: Everything else, off-topic, unclear requests, weather, jokes, personal topics
-
-SPECIAL HANDLING FOR BRAND QUESTIONS:
-- Detect if user is asking about brands: "what brands you have", "which brands", "show me brands", "brand options", "what car brands", "available brands"
-- Check conversation history for previous brand questions
-- If this is a repeated brand question, mark as "repeated_brand_question" in entities
 
 Return strict JSON with these keys (STANDARDIZED FORMAT):
 {
@@ -376,8 +350,7 @@ Return strict JSON with these keys (STANDARDIZED FORMAT):
     "phone": "string|null",
     "location": "string|null",
     "time": "string|null",
-    "reason": "string|null",
-    "repeated_brand_question": "boolean|null"
+    "reason": "string|null"
   },
   "confidence": "number between 0.0 and 1.0"
 }
@@ -386,10 +359,7 @@ User message: "${message}"
 
 ${historyArray.length > 0 ? `Previous conversation context: ${JSON.stringify(historyArray.slice(-3))}` : ''}
 ${sessionState.step ? `Current session step: ${sessionState.step}` : ''}
-${sessionState.requirements ? `Current requirements: ${JSON.stringify(sessionState.requirements)}` : ''}
-${sessionState.conversationHistory ? `Recent conversation history: ${JSON.stringify(sessionState.conversationHistory.slice(-5))}` : ''}
-
-IMPORTANT: Check if this is a repeated brand question by looking at conversation history. If user previously asked about brands and is asking again, set "repeated_brand_question": true in entities.`;
+${sessionState.requirements ? `Current requirements: ${JSON.stringify(sessionState.requirements)}` : ''}`;
 
     const result = await callGemini(message, prompt);
     
@@ -398,11 +368,6 @@ IMPORTANT: Check if this is a repeated brand question by looking at conversation
       const intent = result.intent || 'other';
       const entities = result.entities || {};
       const confidence = typeof result.confidence === 'number' ? result.confidence : 0.5;
-      
-      // Update conversation history with detected intent
-      if (sessionState.conversationHistory && sessionState.conversationHistory.length > 0) {
-        sessionState.conversationHistory[sessionState.conversationHistory.length - 1].intent = intent;
-      }
       
       // Generate LLM response based on extracted intent and entities
       const messageStr = typeof message === 'string' ? message : String(message || '');
@@ -417,9 +382,9 @@ IMPORTANT: Check if this is a repeated brand question by looking at conversation
     }
     
     // Fallback: Extract entities using pattern matching when LLM fails
-    const fallbackMessageStr = typeof message === 'string' ? message : String(message || '');
-    const fallbackResult = extractEntitiesFallback(fallbackMessageStr, sessionState);
-    const fallbackMessage = await generateLLMResponse(fallbackMessageStr, fallbackResult.intent, fallbackResult.entities, sessionState);
+    const messageStr = typeof message === 'string' ? message : String(message || '');
+    const fallbackResult = extractEntitiesFallback(messageStr, sessionState);
+    const fallbackMessage = await generateLLMResponse(messageStr, fallbackResult.intent, fallbackResult.entities, sessionState);
     
     return {
       intent: fallbackResult.intent,
